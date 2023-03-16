@@ -15,6 +15,7 @@ import (
 	_ "net/http/pprof" // pprof HTTP handlers
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/spf13/pflag"
+	"pgregory.net/rand"
 
 	"github.com/vkcom/statshouse/internal/vkgo/build"
 	"github.com/vkcom/statshouse/internal/vkgo/rpc"
@@ -274,6 +276,25 @@ func run(argv args, vkuthPublicKeys map[string][]byte) error {
 
 	statlogs.Configure(log.Printf, argv.statsHouseAddr, argv.statsHouseEnv)
 	defer func() { _ = statlogs.Close() }()
+	go func() {
+		s := []string{"s1", "s2"}
+		t := []string{"t1", "t2"}
+		ish := []string{"true", "false"}
+		se := []string{"se1", "se2", "se3"}
+		p := []string{"p1", "p2", "p3"}
+
+		for i := 0; ; i++ {
+			statlogs.AccessMetric("test_sh_mappings", statlogs.Tags{
+				{"source", s[rand.Int()%len(s)]},
+				{"type", t[rand.Int()%len(t)]},
+				{"is_highload", ish[rand.Int()%len(ish)]},
+				{"server_name", strconv.FormatInt(rand.Int63()%100, 10)},
+				{"script_entry_point", se[rand.Int()%len(se)]},
+				{"process", p[rand.Int()%len(p)]},
+			}).StringTop(strconv.FormatInt(rand.Int63()+100, 10))
+			time.Sleep(time.Millisecond * 10)
+		}
+	}()
 	var rpcCryptoKeys []string
 	if argv.rpcCryptoKeyPath != "" {
 		cryptoKey, err := os.ReadFile(argv.rpcCryptoKeyPath)
