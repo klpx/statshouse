@@ -243,10 +243,6 @@ func calcLevels(version string, preKeyFrom int64, preKeyOnly bool, isUnique bool
 	for _, s := range lodLevels[version] {
 		cut := now - s.relSwitch
 		switch {
-		case preKeyOnly && preKeyFrom != math.MaxInt64:
-			s2 := s
-			s2.hasPreKey = true
-			levels = append(levels, s2)
 		case cut < preKeyFrom:
 			levels = append(levels, s)
 		case !split:
