@@ -541,6 +541,8 @@ func (e *Engine) commitTXAndStartNewLocked(c Conn, commit, waitBinlogCommit, ski
 	if waitBinlogCommit && e.binlog != nil {
 		info = e.binlogWaitDBSync(c)
 	}
+	// to avoid commit timeout
+	c.ctx = context.Background()
 	if commit {
 		startCommit := time.Now()
 		if !skipUpdateMeta && e.binlog != nil && info != nil && len(info.meta) > 0 {
