@@ -212,7 +212,7 @@ func RunAggregator(dc *pcache.DiskCache, storageDir string, listenAddr string, a
 	a.startTimestamp = uint32(now.Unix())
 	_ = a.advanceRecentBuckets(now, true) // Just create initial set of buckets and set LastHour
 	a.appendInternalLog("start", "", build.Commit(), build.Info(), strings.Join(os.Args[1:], " "), strings.Join(addresses, ","), "", "Started")
-
+	log.Println("start", build.Commit(), build.Info(), build.CommitTimestamp(), build.Time())
 	go a.goTicker()
 	for i := 0; i < a.config.RecentInserters; i++ {
 		go a.goSend(i)

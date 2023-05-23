@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"time"
@@ -634,6 +635,7 @@ func (s *Shard) sendSourceBucketCompressed(ctx context.Context, cbd compressedBu
 		OriginalSize:    int32(binary.LittleEndian.Uint32(cbd.data)),
 		CompressedData:  cbd.data[4:],
 	}
+	log.Println(args.String())
 	s.fillProxyHeaderBytes(&args.FieldsMask, &args.Header)
 	args.SetHistoric(historic)
 	args.SetSpare(spare)
@@ -703,6 +705,7 @@ func (s *Shard) sendRecent(cbd compressedBucketData) bool {
 		err = s.statshouse.Shards[spare].sendSourceBucketCompressed(ctx, cbd, false, true, &resp)
 	}
 	if err != nil {
+		log.Println("agent err", err.Error())
 		if !data_model.SilentRPCError(err) {
 			s.stats.recentSendFailed.Add(1)
 			s.client.Client.Logf("Send Error: s.client.Do returned error %v, moving bucket %d to historic conveyor for shard %d", err, cbd.time, s.ShardReplicaNum)
@@ -771,6 +774,7 @@ func (s *Shard) sendHistoric(cbd compressedBucketData, scratchPad *[]byte) {
 		}
 
 		if err != nil {
+			log.Println("agent hist err", err.Error())
 			if !data_model.SilentRPCError(err) {
 				s.stats.historicSendFailed.Add(1)
 			} else {
