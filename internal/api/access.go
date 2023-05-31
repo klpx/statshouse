@@ -162,12 +162,6 @@ func (ai *accessInfo) canEditMetric(create bool, old format.MetricMetaValue, new
 		if preKeyOnly(old) != preKeyOnly(new_) {
 			return false
 		}
-		if preKeyOnly(old) != preKeyOnly(new_) {
-			return false
-		}
-		if skip(old) != skip(new_) {
-			return false
-		}
 
 		return true
 	}
@@ -199,16 +193,8 @@ func preKey(m format.MetricMetaValue) uint32 {
 	return m.PreKeyFrom
 }
 
-func preKeyTagID(m format.MetricMetaValue) string {
-	return m.PreKeyTagID
-}
-
 func preKeyOnly(m format.MetricMetaValue) bool {
 	return m.PreKeyOnly
-}
-
-func skip(m format.MetricMetaValue) (bool, bool, bool) {
-	return m.SkipMaxHost, m.SkipMinHost, m.SkipSumSquare
 }
 
 func hasPrefixAccess(m map[string]bool, metric string) bool {
