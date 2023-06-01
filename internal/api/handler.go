@@ -410,6 +410,7 @@ type (
 	tableRowKey struct {
 		time int64
 		tsTags
+		tsValues
 	}
 )
 
