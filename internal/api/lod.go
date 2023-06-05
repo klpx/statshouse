@@ -7,6 +7,7 @@
 package api
 
 import (
+	"fmt"
 	"math"
 	"time"
 )
@@ -198,7 +199,7 @@ func roundRange(start int64, end int64, step int64, utcOffset int64, location *t
 	rStart := roundTime(start, step, utcOffset)
 	rEnd := roundTime(end, step, utcOffset)
 	if end != start {
-		for rEnd-step < end-1 {
+		for rEnd < end {
 			rEnd += step
 		}
 	}
@@ -395,6 +396,7 @@ func selectLastQueryLOD(s lodSwitch, from int64, to int64, minStep int64, utcOff
 		lodLevel = stepSec
 	}
 	fromSec, toSec := roundRange(from, to, lodLevel, utcOffset, location)
+	fmt.Println("FINAL:", "from:", fromSec, "to:", toSec)
 	return lodInfo{
 		fromSec:    fromSec,
 		toSec:      toSec,

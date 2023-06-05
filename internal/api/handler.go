@@ -3265,7 +3265,6 @@ func replaceInfNan(v *float64) {
 
 func (h *Handler) loadPoints(ctx context.Context, pq *preparedPointsQuery, lod lodInfo, ret [][]tsSelectRow, retStartIx int) (int, error) {
 	query, args, err := loadPointsQuery(pq, lod, h.utcOffset)
-	fmt.Println(query)
 	if err != nil {
 		return 0, err
 	}
@@ -3561,7 +3560,7 @@ func lessThan(l RowMarker, r tsSelectRow, skey string, orEq bool) bool {
 	return l.SKey < skey
 }
 
-func rowMarkerLessThan(l, r RowMarker) bool {
+func rowMarkerLessThan(l, r *RowMarker) bool {
 	if l.Time != r.Time {
 		return l.Time < r.Time
 	}
