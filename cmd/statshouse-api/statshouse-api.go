@@ -101,6 +101,16 @@ type args struct {
 }
 
 func main() {
+	statshouse.Configure(log.Printf, statshouse.DefaultStatsHouseAddr, "dev")
+	for {
+		statshouse.AccessMetric("test_jv", statshouse.Tags{{"1", "go"}, {"2", "go"}, {"key", "countgo"}}).Count(1)
+		statshouse.AccessMetric("test_jv", statshouse.Tags{{"1", "go"}, {"2", "go"}, {"key", "valuego"}}).Value(1)
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func main1() {
+
 	log.SetPrefix("[statshouse-api] ")
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lmsgprefix)
 
