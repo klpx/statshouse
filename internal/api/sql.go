@@ -410,6 +410,9 @@ func preKeyTableName(lod lodInfo, tagID string, preKeyTagID string, filterIn map
 
 func preKeyTableNameFromPoint(point pointQuery, tagID string, preKeyTagID string, filterIn map[string][]interface{}, filterNotIn map[string][]interface{}) string {
 	usePreKey := point.hasPreKey && ((tagID != "" && tagID == preKeyTagID) || len(filterIn[preKeyTagID]) > 0 || len(filterNotIn[preKeyTagID]) > 0)
+	fmt.Println("tagID", "'"+tagID+"", "preKeyTagID", "'"+preKeyTagID+"")
+	fmt.Println(filterIn)
+	fmt.Println(filterNotIn)
 	if usePreKey {
 		return preKeyTableNames[point.table]
 	}

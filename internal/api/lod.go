@@ -7,7 +7,9 @@
 package api
 
 import (
+	"fmt"
 	"math"
+	"runtime/debug"
 	"time"
 )
 
@@ -233,11 +235,16 @@ func calcLevels(version string, preKeyFrom int64, preKeyOnly bool, isUnique bool
 		}
 	}
 
+	fmt.Println("prekeyfrom", preKeyFrom)
+	if preKeyFrom == 0 {
+		debug.PrintStack()
+	}
 	if preKeyFrom != 0 {
 		preKeyFrom = roundTime(preKeyFrom, _1h, utcOffset)
 	} else {
 		preKeyFrom = math.MaxInt64 // "cut < preKeyFrom" is always false
 	}
+	fmt.Println("prekeyfrom round", preKeyFrom)
 	var levels []lodSwitch
 	split := false
 	for _, s := range lodLevels[version] {
@@ -365,7 +372,13 @@ func selectQueryLODs(version string, preKeyFrom int64, preKeyOnly bool, resoluti
 		}
 		lodFrom = lod.toSec
 	}
-	return mergeLODs(ret)
+	res := mergeLODs(ret)
+	for _, lod := range res {
+		fmt.Println("stepSec", lod.stepSec)
+		fmt.Println("from", lod.fromSec, "to", lod.toSec)
+		fmt.Println("hasPrekey", lod.hasPreKey, "table", lod.table)
+	}
+	return res
 }
 
 func mergeLODs(lods []lodInfo) []lodInfo {
