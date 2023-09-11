@@ -22,7 +22,8 @@ type MappedMetricHeader struct {
 	CheckedTagIndex int  // we check tags one by one, remembering position here, between invocations of mapTags
 	ValuesChecked   bool // infs, nans, etc. This might be expensive, so done only once
 
-	IsKeySet  [format.MaxTags]bool // report setting keys more than once.
+	IsKeySet [format.MaxTagsNew]bool // report setting keys more than once.
+	// IsLongKeySet  [format.MaxLongTags]bool // report setting keys more than once.
 	IsSKeySet bool
 	IsHKeySet bool
 
@@ -37,6 +38,8 @@ type MappedMetricHeader struct {
 	LegacyCanonicalTagKey int32  // +TagIDShift, as required by "tag_id" in builtin metric. If more than 1, remembers some
 	InvalidRawValue       []byte // reference to memory inside tlstatshouse.MetricBytes. If more than 1 problem, reports the last one
 	InvalidRawTagKey      int32  // key of InvalidRawValue
+	InvalidLongTagKey     int32  // key of InvalidRawValue
+
 }
 
 // TODO - implement InvalidRawValue and InvalidRawTagKey
@@ -55,6 +58,10 @@ func (h *MappedMetricHeader) SetKey(index int, id int32, tagIDKey int32) {
 		}
 		h.IsKeySet[index] = true
 	}
+}
+
+func (h *MappedMetricHeader) SetLongKey(index int, id int64, tagIDKey int32) {
+	h.Key.LongKeys[index] = id
 }
 
 func (h *MappedMetricHeader) SetInvalidString(ingestionStatus int32, tagIDKey int32, invalidString []byte) {

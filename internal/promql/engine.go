@@ -842,11 +842,11 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 	}
 	// filtering
 	var (
-		filterIn   [format.MaxTags]map[int32]string // tag index -> tag value ID -> tag value
-		filterOut  [format.MaxTags]map[int32]string // as above
+		filterIn   [format.MaxTagsNew]map[int32]string // tag index -> tag value ID -> tag value
+		filterOut  [format.MaxTagsNew]map[int32]string // as above
 		sFilterIn  []string
 		sFilterOut []string
-		emptyCount [format.MaxTags + 1]int // number of "MatchEqual" or "MatchRegexp" filters which are guaranteed to yield empty response
+		emptyCount [format.MaxTagsNew + 1]int // number of "MatchEqual" or "MatchRegexp" filters which are guaranteed to yield empty response
 	)
 	for _, matcher := range sel.LabelMatchers {
 		if strings.HasPrefix(matcher.Name, "__") {
@@ -876,7 +876,7 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 				}
 				if n == 0 {
 					// there no data satisfying the filter
-					emptyCount[format.MaxTags]++
+					emptyCount[format.MaxTagsNew]++
 					continue
 				}
 			case labels.MatchNotRegexp:
@@ -967,7 +967,7 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 			continue
 		}
 		var m int
-		if i == format.MaxTags {
+		if i == format.MaxTagsNew {
 			m = len(sFilterIn)
 		} else {
 			m = len(filterIn[i])
@@ -1026,7 +1026,7 @@ func (ev *evaluator) getTagValues(ctx context.Context, metric *format.MetricMeta
 	m, ok := ev.tags[metric]
 	if !ok {
 		// tag index -> offset -> tag value ID -> tag value
-		m = make([]map[int64]map[int32]string, format.MaxTags)
+		m = make([]map[int64]map[int32]string, format.MaxTagsNew)
 		ev.tags[metric] = m
 	}
 	m2 := m[tagX]

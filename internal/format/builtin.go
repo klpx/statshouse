@@ -210,6 +210,7 @@ const (
 	TagValueIDSrcIngestionStatusErrValueUniqueBothSet        = 50
 	TagValueIDSrcIngestionStatusWarnOldCounterSemantic       = 51 // never written, for historic data
 	TagValueIDSrcIngestionStatusWarnMapInvalidRawTagValue    = 52
+	TagValueIDSrcIngestionStatusWarnMapInvalidLongTagValue   = 53
 
 	TagValueIDPacketFormatLegacy   = 1
 	TagValueIDPacketFormatTL       = 2
@@ -553,6 +554,7 @@ This metric uses sampling budgets of metric it refers to, so flooding by errors 
 					TagValueIDSrcIngestionStatusErrValueUniqueBothSet:        "err_value_unique_both_set",
 					TagValueIDSrcIngestionStatusWarnOldCounterSemantic:       "warn_deprecated_counter_semantic",
 					TagValueIDSrcIngestionStatusWarnMapInvalidRawTagValue:    "warn_map_invalid_raw_tag_value",
+					TagValueIDSrcIngestionStatusWarnMapInvalidLongTagValue:   "warn_map_invalid_long_tag_value",
 				}),
 			}, {
 				Description: "tag_id",
@@ -1542,6 +1544,19 @@ Value is delta between second value and time it was inserted.`,
 				},
 			},
 		},
+
+		-321: {
+			Name:        "__long_metric",
+			Resolution:  60,
+			Kind:        MetricKindCounter,
+			Description: "Metric usage",
+			Tags: []MetricMetaTag{
+				{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {Description: "user"},
+			},
+			LongTags: []MetricMetaTag{
+				{Description: "long", Raw: true},
+			},
+		},
 	}
 
 	builtinMetricsInvisible = map[int32]bool{
@@ -1770,7 +1785,7 @@ func init() {
 		builtinMetricsAllowedToReceive[k] = true
 		metricsWithoutAggregatorID[k] = true
 	}
-	for i := 0; i < MaxTags; i++ {
+	for i := 0; i < MaxTagsNew; i++ {
 		name := strconv.Itoa(i)
 		legacyName := legacyTagIDPrefix + name
 		tagIDsLegacy = append(tagIDsLegacy, legacyName)
@@ -1780,6 +1795,12 @@ func init() {
 		apiCompatTagID[legacyName] = name
 		tagIDTag2TagID[int32(i+TagIDShiftLegacy)] = legacyName
 		tagIDTag2TagID[int32(i+TagIDShift)] = tagStringForUI + " " + strconv.Itoa(i) // for UI only
+	}
+	for i := 0; i < MaxLongTags; i++ {
+		name := LongTagPrefix + strconv.Itoa(i)
+		longTagIDs = append(longTagIDs, name)
+		longTagIDToIndex[name] = i
+		apiCompatTagID[name] = name
 	}
 	apiCompatTagID[legacyEnvTagName] = "0"
 	apiCompatTagID[StringTopTagID] = StringTopTagID
@@ -1806,7 +1827,7 @@ func init() {
 		} else {
 			m.Tags = append([]MetricMetaTag{{Description: "-"}}, m.Tags...)
 		}
-		for len(m.Tags) < MaxTags {
+		for len(m.Tags) < MaxTagsNew {
 			m.Tags = append(m.Tags, MetricMetaTag{Description: "-"})
 		}
 		if !metricsWithoutAggregatorID[id] {

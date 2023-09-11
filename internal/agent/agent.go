@@ -197,13 +197,13 @@ func MakeAgent(network string, storageDir string, aesPwd string, config Config, 
 		}
 	}
 	// TODO - remove those, simply write metrics to bucket as usual
-	result.statErrorsDiskWrite = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [16]int32{0, format.TagValueIDDiskCacheErrorWrite}})
-	result.statErrorsDiskRead = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [16]int32{0, format.TagValueIDDiskCacheErrorRead}})
-	result.statErrorsDiskErase = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [16]int32{0, format.TagValueIDDiskCacheErrorDelete}})
-	result.statErrorsDiskReadNotConfigured = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [16]int32{0, format.TagValueIDDiskCacheErrorReadNotConfigured}})
-	result.statErrorsDiskCompressFailed = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [16]int32{0, format.TagValueIDDiskCacheErrorCompressFailed}})
-	result.statLongWindowOverflow = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDTimingErrors, Keys: [16]int32{0, format.TagValueIDTimingLongWindowThrownAgent}})
-	result.statDiskOverflow = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDTimingErrors, Keys: [16]int32{0, format.TagValueIDTimingLongWindowThrownAgent}})
+	result.statErrorsDiskWrite = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDDiskCacheErrorWrite}})
+	result.statErrorsDiskRead = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDDiskCacheErrorRead}})
+	result.statErrorsDiskErase = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDDiskCacheErrorDelete}})
+	result.statErrorsDiskReadNotConfigured = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDDiskCacheErrorReadNotConfigured}})
+	result.statErrorsDiskCompressFailed = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDAgentDiskCacheErrors, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDDiskCacheErrorCompressFailed}})
+	result.statLongWindowOverflow = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDTimingErrors, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDTimingLongWindowThrownAgent}})
+	result.statDiskOverflow = result.CreateBuiltInItemValue(data_model.Key{Metric: format.BuiltinMetricIDTimingErrors, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDTimingLongWindowThrownAgent}})
 
 	result.updateConfigRemotelyExperimental() // first update from stored in sqlite
 	return result, nil
@@ -363,14 +363,14 @@ func (s *Agent) ApplyMetric(m tlstatshouse.MetricBytes, h data_model.MappedMetri
 		// In case of utf decoding error, it contains hex representation of original string
 		s.AddCounterHostStringBytes(data_model.Key{
 			Metric: format.BuiltinMetricIDIngestionStatus,
-			Keys:   [format.MaxTags]int32{h.Key.Keys[0], h.Key.Metric, h.IngestionStatus, h.IngestionTagKey},
+			Keys:   [format.MaxTagsNew]int32{h.Key.Keys[0], h.Key.Metric, h.IngestionStatus, h.IngestionTagKey},
 		}, h.InvalidString, 1, 0, nil)
 		return
 	}
 	// now set ok status
 	s.AddCounter(data_model.Key{
 		Metric: format.BuiltinMetricIDIngestionStatus,
-		Keys:   [format.MaxTags]int32{h.Key.Keys[0], h.Key.Metric, ingestionStatusOKTag, h.IngestionTagKey},
+		Keys:   [format.MaxTagsNew]int32{h.Key.Keys[0], h.Key.Metric, ingestionStatusOKTag, h.IngestionTagKey},
 	}, 1)
 	// now set all warnings
 	if h.NotFoundTagName != nil { // this is correct, can be set, but empty
@@ -378,25 +378,31 @@ func (s *Agent) ApplyMetric(m tlstatshouse.MetricBytes, h data_model.MappedMetri
 		// This is warning, so written independent of ingestion status
 		s.AddCounterHostStringBytes(data_model.Key{
 			Metric: format.BuiltinMetricIDIngestionStatus,
-			Keys:   [format.MaxTags]int32{h.Key.Keys[0], h.Key.Metric, format.TagValueIDSrcIngestionStatusWarnMapTagNameNotFound}, // tag ID not known
+			Keys:   [format.MaxTagsNew]int32{h.Key.Keys[0], h.Key.Metric, format.TagValueIDSrcIngestionStatusWarnMapTagNameNotFound}, // tag ID not known
 		}, h.NotFoundTagName, 1, 0, nil)
 	}
 	if h.TagSetTwiceKey != 0 {
 		s.AddCounter(data_model.Key{
 			Metric: format.BuiltinMetricIDIngestionStatus,
-			Keys:   [format.MaxTags]int32{h.Key.Keys[0], h.Key.Metric, format.TagValueIDSrcIngestionStatusWarnMapTagSetTwice, h.TagSetTwiceKey},
+			Keys:   [format.MaxTagsNew]int32{h.Key.Keys[0], h.Key.Metric, format.TagValueIDSrcIngestionStatusWarnMapTagSetTwice, h.TagSetTwiceKey},
 		}, 1)
 	}
 	if h.InvalidRawTagKey != 0 {
 		s.AddCounterHostStringBytes(data_model.Key{
 			Metric: format.BuiltinMetricIDIngestionStatus,
-			Keys:   [format.MaxTags]int32{h.Key.Keys[0], h.Key.Metric, format.TagValueIDSrcIngestionStatusWarnMapInvalidRawTagValue, h.InvalidRawTagKey},
+			Keys:   [format.MaxTagsNew]int32{h.Key.Keys[0], h.Key.Metric, format.TagValueIDSrcIngestionStatusWarnMapInvalidRawTagValue, h.InvalidRawTagKey},
+		}, h.InvalidRawValue, 1, 0, nil)
+	}
+	if h.InvalidLongTagKey != 0 {
+		s.AddCounterHostStringBytes(data_model.Key{
+			Metric: format.BuiltinMetricIDIngestionStatus,
+			Keys:   [format.MaxTagsNew]int32{h.Key.Keys[0], h.Key.Metric, format.TagValueIDSrcIngestionStatusWarnMapInvalidLongTagValue, h.InvalidLongTagKey},
 		}, h.InvalidRawValue, 1, 0, nil)
 	}
 	if h.LegacyCanonicalTagKey != 0 {
 		s.AddCounter(data_model.Key{
 			Metric: format.BuiltinMetricIDIngestionStatus,
-			Keys:   [format.MaxTags]int32{h.Key.Keys[0], h.Key.Metric, format.TagValueIDSrcIngestionStatusWarnDeprecatedKeyName, h.LegacyCanonicalTagKey},
+			Keys:   [format.MaxTagsNew]int32{h.Key.Keys[0], h.Key.Metric, format.TagValueIDSrcIngestionStatusWarnDeprecatedKeyName, h.LegacyCanonicalTagKey},
 		}, 1)
 	}
 
@@ -565,7 +571,7 @@ func (s *Agent) AddUniqueHostStringBytes(key data_model.Key, hostTag int32, str 
 	shardReplica.AddUniqueHostStringBytes(key, hostTag, str, keyHash, hashes, count, metricInfo)
 }
 
-func (s *Agent) AggKey(time uint32, metricID int32, keys [format.MaxTags]int32) data_model.Key {
+func (s *Agent) AggKey(time uint32, metricID int32, keys [format.MaxTagsNew]int32) data_model.Key {
 	return data_model.AggKey(time, metricID, keys, s.AggregatorHost, s.AggregatorShardKey, s.AggregatorReplicaKey)
 }
 

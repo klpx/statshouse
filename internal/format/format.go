@@ -21,6 +21,8 @@ import (
 )
 
 const (
+	MaxLongTags  = 4
+	MaxTagsNew   = 32
 	MaxTags      = 16
 	MaxStringLen = 128 // both for normal tags and _s, _h tags (string tops, hostnames)
 
@@ -32,12 +34,12 @@ const (
 	EffectiveWeightOne = 128                      // metric.Weight is multiplied by this and rounded. Do not make too big or metric with weight set to 0 will disappear completely.
 	MaxEffectiveWeight = 100 * EffectiveWeightOne // do not make too high, we multiply this by sum of metric serialized length during sampling
 
-	StringTopTagID = "_s"
-	HostTagID      = "_h"
-	ShardTagID     = "_shard_num"
-	EnvTagID       = "0"
-	LETagName      = "le"
-
+	StringTopTagID    = "_s"
+	HostTagID         = "_h"
+	ShardTagID        = "_shard_num"
+	EnvTagID          = "0"
+	LETagName         = "le"
+	LongTagPrefix     = "_long_"
 	LETagIndex        = 15
 	StringTopTagIndex = -1 // used as flag during mapping
 	HostTagIndex      = -2 // used as flag during mapping
@@ -99,6 +101,9 @@ var (
 	tagIDTag2TagID = map[int32]string{} // initialized in builtin.go due to dependency
 	tagIDToIndex   = map[string]int{}   // initialized in builtin.go due to dependency
 
+	longTagIDs       []string // initialized in builtin.go due to dependency
+	longTagIDToIndex = map[string]int{}
+
 	errInvalidCodeTagValue = fmt.Errorf("invalid code tag value") // must be fast
 	errBadEncoding         = fmt.Errorf("bad utf-8 encoding")     // must be fast
 )
@@ -131,6 +136,7 @@ type MetricMetaTag struct {
 	Comment2Value map[string]string `json:"-"` // Should be restored from ValueComments after reading
 	IsMetric      bool              `json:"-"` // Only for built-in metrics so never saved or parsed
 	Index         int               `json:"-"` // Should be restored from position in MetricMetaValue.Tags
+	IsLong        bool              `json:"-"`
 }
 
 const (
@@ -192,6 +198,7 @@ type MetricMetaValue struct {
 
 	Description          string          `json:"description,omitempty"`
 	Tags                 []MetricMetaTag `json:"tags,omitempty"`
+	LongTags             []MetricMetaTag `json:"long_tags,omitempty"`
 	Visible              bool            `json:"visible,omitempty"`
 	Kind                 string          `json:"kind"`
 	Weight               float64         `json:"weight,omitempty"`
@@ -338,9 +345,14 @@ func (m *MetricMetaValue) RestoreCachedInfo() error {
 	}
 	m.PreKeyIndex = -1
 	tags := m.Tags
-	if len(tags) > MaxTags { // prevent index out of range during mapping
-		tags = tags[:MaxTags]
-		err = multierr.Append(err, fmt.Errorf("too many tags, limit is: %d", MaxTags))
+	if len(m.LongTags) > MaxLongTags {
+		tags = tags[:MaxLongTags]
+		err = multierr.Append(err, fmt.Errorf("too many long tags, limit is: %d", MaxLongTags))
+	}
+
+	if len(tags) > MaxTagsNew { // prevent index out of range during mapping
+		tags = tags[:MaxTagsNew]
+		err = multierr.Append(err, fmt.Errorf("too many tags, limit is: %d", MaxTagsNew))
 	}
 	for i := range tags {
 		var (
@@ -358,6 +370,19 @@ func (m *MetricMetaValue) RestoreCachedInfo() error {
 				m.PreKeyIndex = i
 				m.PreKeyTagID = tagID // fix legacy name
 			}
+		}
+		if !ValidRawKind(tag.RawKind) {
+			err = multierr.Append(err, fmt.Errorf("invalid raw kind %q of tag %d", tag.RawKind, i))
+		}
+	}
+	longTags := m.LongTags
+	for i := range m.LongTags {
+		var (
+			tag   = &longTags[i]
+			tagID = LongTagID(i)
+		)
+		if tag.Name == tagID { // remove redundancy
+			tag.Name = ""
 		}
 		if !ValidRawKind(tag.RawKind) {
 			err = multierr.Append(err, fmt.Errorf("invalid raw kind %q of tag %d", tag.RawKind, i))
@@ -392,6 +417,24 @@ func (m *MetricMetaValue) RestoreCachedInfo() error {
 
 		m.setName2Tag(tag.Name, *tag, false, &err)
 	}
+	for i := range longTags {
+		tag := &longTags[i]
+		//if tag.Raw {
+		//	mask |= 1 << i
+		//}
+
+		var c2v map[string]string
+		if len(tag.ValueComments) > 0 {
+			c2v = make(map[string]string, len(tag.ValueComments))
+		}
+		for v, c := range tag.ValueComments {
+			c2v[c] = v
+		}
+		tag.Comment2Value = c2v
+		tag.Index = i
+		tag.IsLong = true
+		m.setName2Tag(tag.Name, *tag, false, &err)
+	}
 	m.setName2Tag(StringTopTagID, sTag, true, &err)
 	hTag := MetricMetaTag{
 		Name:        "",
@@ -399,11 +442,18 @@ func (m *MetricMetaValue) RestoreCachedInfo() error {
 		Index:       HostTagIndex,
 	}
 	m.setName2Tag(HostTagID, hTag, true, &err)
-	for i := 0; i < MaxTags; i++ { // separate pass to overwrite potential collisions with canonical names in the loop above
+	for i := 0; i < MaxTagsNew; i++ { // separate pass to overwrite potential collisions with canonical names in the loop above
 		if i < len(tags) {
 			m.setName2Tag(TagID(i), tags[i], true, &err)
 		} else {
 			m.setName2Tag(TagID(i), MetricMetaTag{Index: i}, true, &err)
+		}
+	}
+	for i := 0; i < MaxLongTags; i++ { // separate pass to overwrite potential collisions with canonical names in the loop above
+		if i < len(m.LongTags) {
+			m.setName2Tag(LongTagID(i), m.LongTags[i], true, &err)
+		} else {
+			m.setName2Tag(LongTagID(i), MetricMetaTag{Index: i, IsLong: true}, true, &err)
 		}
 	}
 	m.RawTagMask = mask
@@ -562,12 +612,24 @@ func TagIndex(tagID string) int { // inverse of 'TagID'
 	return i
 }
 
+func LongTagIndex(tagID string) int { // inverse of 'TagID'
+	i, ok := longTagIDToIndex[tagID]
+	if !ok {
+		return -1
+	}
+	return i
+}
+
 func TagIDLegacy(i int) string {
 	return tagIDsLegacy[i]
 }
 
 func TagID(i int) string {
 	return tagIDs[i]
+}
+
+func LongTagID(i int) string {
+	return longTagIDs[i]
 }
 
 func AllowedResolution(r int) int {
@@ -850,6 +912,14 @@ func ContainsRawTagValue(s mem.RO) (int32, bool) {
 	}
 	i, err := mem.ParseInt(s, 10, 64)
 	return int32(i), err == nil && i >= math.MinInt32 && i <= math.MaxUint32
+}
+
+func ContainsLongRawTagValue(s mem.RO) (int64, bool) {
+	if s.Len() == 0 {
+		return 0, true // make sure empty string is the same as value not set, even for raw values
+	}
+	i, err := mem.ParseInt(s, 10, 64)
+	return i, err == nil
 }
 
 // Limit build arch for built in-metrics collected by source

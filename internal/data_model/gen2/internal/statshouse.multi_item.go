@@ -17,13 +17,24 @@ type StatshouseMultiItem struct {
 	FieldsMask uint32
 	Metric     int32
 	Keys       []int32
-	T          uint32 // Conditional: item.FieldsMask.10
+	LongKeys   []int64 // Conditional: item.FieldsMask.12
+	T          uint32  // Conditional: item.FieldsMask.10
 	Tail       StatshouseMultiValue
 	Top        []StatshouseTopElement // Conditional: item.FieldsMask.11
 }
 
 func (StatshouseMultiItem) TLName() string { return "statshouse.multi_item" }
 func (StatshouseMultiItem) TLTag() uint32  { return 0xc803e07 }
+
+func (item *StatshouseMultiItem) SetLongKeys(v []int64) {
+	item.LongKeys = v
+	item.FieldsMask |= 1 << 12
+}
+func (item *StatshouseMultiItem) ClearLongKeys() {
+	item.LongKeys = item.LongKeys[:0]
+	item.FieldsMask &^= 1 << 12
+}
+func (item StatshouseMultiItem) IsSetLongKeys() bool { return item.FieldsMask&(1<<12) != 0 }
 
 func (item *StatshouseMultiItem) SetT(v uint32) {
 	item.T = v
@@ -49,6 +60,7 @@ func (item *StatshouseMultiItem) Reset() {
 	item.FieldsMask = 0
 	item.Metric = 0
 	item.Keys = item.Keys[:0]
+	item.LongKeys = item.LongKeys[:0]
 	item.T = 0
 	item.Tail.Reset()
 	item.Top = item.Top[:0]
@@ -63,6 +75,13 @@ func (item *StatshouseMultiItem) Read(w []byte) (_ []byte, err error) {
 	}
 	if w, err = VectorInt0Read(w, &item.Keys); err != nil {
 		return w, err
+	}
+	if item.FieldsMask&(1<<12) != 0 {
+		if w, err = VectorLong0Read(w, &item.LongKeys); err != nil {
+			return w, err
+		}
+	} else {
+		item.LongKeys = item.LongKeys[:0]
 	}
 	if item.FieldsMask&(1<<10) != 0 {
 		if w, err = basictl.NatRead(w, &item.T); err != nil {
@@ -89,6 +108,11 @@ func (item *StatshouseMultiItem) Write(w []byte) (_ []byte, err error) {
 	w = basictl.IntWrite(w, item.Metric)
 	if w, err = VectorInt0Write(w, item.Keys); err != nil {
 		return w, err
+	}
+	if item.FieldsMask&(1<<12) != 0 {
+		if w, err = VectorLong0Write(w, item.LongKeys); err != nil {
+			return w, err
+		}
 	}
 	if item.FieldsMask&(1<<10) != 0 {
 		w = basictl.NatWrite(w, item.T)
@@ -144,6 +168,8 @@ func (item *StatshouseMultiItem) readJSON(j interface{}) error {
 	}
 	_jKeys := _jm["keys"]
 	delete(_jm, "keys")
+	_jLongKeys := _jm["long_keys"]
+	delete(_jm, "long_keys")
 	_jT := _jm["t"]
 	delete(_jm, "t")
 	_jTail := _jm["tail"]
@@ -153,6 +179,9 @@ func (item *StatshouseMultiItem) readJSON(j interface{}) error {
 	for k := range _jm {
 		return ErrorInvalidJSONExcessElement("statshouse.multi_item", k)
 	}
+	if _jLongKeys != nil {
+		item.FieldsMask |= 1 << 12
+	}
 	if _jT != nil {
 		item.FieldsMask |= 1 << 10
 	}
@@ -161,6 +190,13 @@ func (item *StatshouseMultiItem) readJSON(j interface{}) error {
 	}
 	if err := VectorInt0ReadJSON(_jKeys, &item.Keys); err != nil {
 		return err
+	}
+	if _jLongKeys != nil {
+		if err := VectorLong0ReadJSON(_jLongKeys, &item.LongKeys); err != nil {
+			return err
+		}
+	} else {
+		item.LongKeys = item.LongKeys[:0]
 	}
 	if _jT != nil {
 		if err := JsonReadUint32(_jT, &item.T); err != nil {
@@ -199,6 +235,15 @@ func (item *StatshouseMultiItem) WriteJSON(w []byte) (_ []byte, err error) {
 		w = append(w, `"keys":`...)
 		if w, err = VectorInt0WriteJSON(w, item.Keys); err != nil {
 			return w, err
+		}
+	}
+	if item.FieldsMask&(1<<12) != 0 {
+		if len(item.LongKeys) != 0 {
+			w = basictl.JSONAddCommaIfNeeded(w)
+			w = append(w, `"long_keys":`...)
+			if w, err = VectorLong0WriteJSON(w, item.LongKeys); err != nil {
+				return w, err
+			}
 		}
 	}
 	if item.FieldsMask&(1<<10) != 0 {
@@ -244,13 +289,24 @@ type StatshouseMultiItemBytes struct {
 	FieldsMask uint32
 	Metric     int32
 	Keys       []int32
-	T          uint32 // Conditional: item.FieldsMask.10
+	LongKeys   []int64 // Conditional: item.FieldsMask.12
+	T          uint32  // Conditional: item.FieldsMask.10
 	Tail       StatshouseMultiValueBytes
 	Top        []StatshouseTopElementBytes // Conditional: item.FieldsMask.11
 }
 
 func (StatshouseMultiItemBytes) TLName() string { return "statshouse.multi_item" }
 func (StatshouseMultiItemBytes) TLTag() uint32  { return 0xc803e07 }
+
+func (item *StatshouseMultiItemBytes) SetLongKeys(v []int64) {
+	item.LongKeys = v
+	item.FieldsMask |= 1 << 12
+}
+func (item *StatshouseMultiItemBytes) ClearLongKeys() {
+	item.LongKeys = item.LongKeys[:0]
+	item.FieldsMask &^= 1 << 12
+}
+func (item StatshouseMultiItemBytes) IsSetLongKeys() bool { return item.FieldsMask&(1<<12) != 0 }
 
 func (item *StatshouseMultiItemBytes) SetT(v uint32) {
 	item.T = v
@@ -276,6 +332,7 @@ func (item *StatshouseMultiItemBytes) Reset() {
 	item.FieldsMask = 0
 	item.Metric = 0
 	item.Keys = item.Keys[:0]
+	item.LongKeys = item.LongKeys[:0]
 	item.T = 0
 	item.Tail.Reset()
 	item.Top = item.Top[:0]
@@ -290,6 +347,13 @@ func (item *StatshouseMultiItemBytes) Read(w []byte) (_ []byte, err error) {
 	}
 	if w, err = VectorInt0Read(w, &item.Keys); err != nil {
 		return w, err
+	}
+	if item.FieldsMask&(1<<12) != 0 {
+		if w, err = VectorLong0Read(w, &item.LongKeys); err != nil {
+			return w, err
+		}
+	} else {
+		item.LongKeys = item.LongKeys[:0]
 	}
 	if item.FieldsMask&(1<<10) != 0 {
 		if w, err = basictl.NatRead(w, &item.T); err != nil {
@@ -316,6 +380,11 @@ func (item *StatshouseMultiItemBytes) Write(w []byte) (_ []byte, err error) {
 	w = basictl.IntWrite(w, item.Metric)
 	if w, err = VectorInt0Write(w, item.Keys); err != nil {
 		return w, err
+	}
+	if item.FieldsMask&(1<<12) != 0 {
+		if w, err = VectorLong0Write(w, item.LongKeys); err != nil {
+			return w, err
+		}
 	}
 	if item.FieldsMask&(1<<10) != 0 {
 		w = basictl.NatWrite(w, item.T)
@@ -371,6 +440,8 @@ func (item *StatshouseMultiItemBytes) readJSON(j interface{}) error {
 	}
 	_jKeys := _jm["keys"]
 	delete(_jm, "keys")
+	_jLongKeys := _jm["long_keys"]
+	delete(_jm, "long_keys")
 	_jT := _jm["t"]
 	delete(_jm, "t")
 	_jTail := _jm["tail"]
@@ -380,6 +451,9 @@ func (item *StatshouseMultiItemBytes) readJSON(j interface{}) error {
 	for k := range _jm {
 		return ErrorInvalidJSONExcessElement("statshouse.multi_item", k)
 	}
+	if _jLongKeys != nil {
+		item.FieldsMask |= 1 << 12
+	}
 	if _jT != nil {
 		item.FieldsMask |= 1 << 10
 	}
@@ -388,6 +462,13 @@ func (item *StatshouseMultiItemBytes) readJSON(j interface{}) error {
 	}
 	if err := VectorInt0ReadJSON(_jKeys, &item.Keys); err != nil {
 		return err
+	}
+	if _jLongKeys != nil {
+		if err := VectorLong0ReadJSON(_jLongKeys, &item.LongKeys); err != nil {
+			return err
+		}
+	} else {
+		item.LongKeys = item.LongKeys[:0]
 	}
 	if _jT != nil {
 		if err := JsonReadUint32(_jT, &item.T); err != nil {
@@ -426,6 +507,15 @@ func (item *StatshouseMultiItemBytes) WriteJSON(w []byte) (_ []byte, err error) 
 		w = append(w, `"keys":`...)
 		if w, err = VectorInt0WriteJSON(w, item.Keys); err != nil {
 			return w, err
+		}
+	}
+	if item.FieldsMask&(1<<12) != 0 {
+		if len(item.LongKeys) != 0 {
+			w = basictl.JSONAddCommaIfNeeded(w)
+			w = append(w, `"long_keys":`...)
+			if w, err = VectorLong0WriteJSON(w, item.LongKeys); err != nil {
+				return w, err
+			}
 		}
 	}
 	if item.FieldsMask&(1<<10) != 0 {

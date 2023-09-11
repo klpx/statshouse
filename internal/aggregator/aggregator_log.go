@@ -66,7 +66,7 @@ func (a *Aggregator) goInternalLog() {
 
 func (a *Aggregator) reportInsertKeys(bucketTime uint32, metric int32, historic bool, err error, status int, exception int) data_model.Key {
 	key := data_model.AggKey(bucketTime, metric,
-		[16]int32{0, 0, 0, 0, format.TagValueIDConveyorRecent, format.TagValueIDInsertTimeOK, int32(status), int32(exception)}, a.aggregatorHost, a.shardKey, a.replicaKey)
+		[format.MaxTagsNew]int32{0, 0, 0, 0, format.TagValueIDConveyorRecent, format.TagValueIDInsertTimeOK, int32(status), int32(exception)}, a.aggregatorHost, a.shardKey, a.replicaKey)
 	if err != nil {
 		key.Keys[5] = format.TagValueIDInsertTimeError
 	}

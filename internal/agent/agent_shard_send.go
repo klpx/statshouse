@@ -85,7 +85,7 @@ func (s *ShardReplica) flushBuckets(now time.Time) {
 
 func addSizeByTypeMetric(sb *tlstatshouse.SourceBucket2, partKey int32, size int) {
 	// This metric is added by source, because aggregator has no spare time for that
-	k := data_model.Key{Metric: format.BuiltinMetricIDTLByteSizePerInflightType, Keys: [16]int32{0, partKey}}
+	k := data_model.Key{Metric: format.BuiltinMetricIDTLByteSizePerInflightType, Keys: [format.MaxTagsNew]int32{0, partKey}}
 
 	item := k.TLMultiItemFromKey(0)
 	item.Tail.SetCounterEq1(true, &item.FieldsMask)
@@ -343,11 +343,11 @@ func (s *ShardReplica) sampleBucket(bucket *data_model.MetricsBucket, rnd *rand.
 	}
 	if pos < len(metricsList) {
 		value := float64(remainingBudget) / float64(remainingWeight)
-		key := data_model.Key{Metric: format.BuiltinMetricIDAgentPerMetricSampleBudget, Keys: [16]int32{0, format.TagValueIDAgentFirstSampledMetricBudgetPerMetric}}
+		key := data_model.Key{Metric: format.BuiltinMetricIDAgentPerMetricSampleBudget, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDAgentFirstSampledMetricBudgetPerMetric}}
 		mi := data_model.MapKeyItemMultiItem(&bucket.MultiItems, key, config.StringTopCapacity, nil)
 		mi.Tail.Value.AddValueCounterHost(value, 1, 0)
 	} else {
-		key := data_model.Key{Metric: format.BuiltinMetricIDAgentPerMetricSampleBudget, Keys: [16]int32{0, format.TagValueIDAgentFirstSampledMetricBudgetUnused}}
+		key := data_model.Key{Metric: format.BuiltinMetricIDAgentPerMetricSampleBudget, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDAgentFirstSampledMetricBudgetUnused}}
 		mi := data_model.MapKeyItemMultiItem(&bucket.MultiItems, key, config.StringTopCapacity, nil)
 		mi.Tail.Value.AddValueCounterHost(float64(remainingBudget), 1, 0)
 	}
@@ -511,10 +511,10 @@ func (s *ShardReplica) sampleBucketWithGroups(bucket *data_model.MetricsBucket, 
 
 	// We presume we have only a few groups, so reporting sizes are over budget and itself not sampled
 	reportGroupSampling := func(sizeBefore int64, sizeAfter int64, groupID int32, fitTag int32) {
-		key := data_model.Key{Metric: format.BuiltinMetricIDGroupSizeBeforeSampling, Keys: [16]int32{0, s.agent.componentTag, groupID, fitTag}}
+		key := data_model.Key{Metric: format.BuiltinMetricIDGroupSizeBeforeSampling, Keys: [format.MaxTagsNew]int32{0, s.agent.componentTag, groupID, fitTag}}
 		mi := data_model.MapKeyItemMultiItem(&bucket.MultiItems, key, config.StringTopCapacity, nil)
 		mi.Tail.Value.AddValueCounterHost(float64(sizeBefore), 1, 0)
-		key = data_model.Key{Metric: format.BuiltinMetricIDGroupSizeAfterSampling, Keys: [16]int32{0, s.agent.componentTag, groupID, fitTag}}
+		key = data_model.Key{Metric: format.BuiltinMetricIDGroupSizeAfterSampling, Keys: [format.MaxTagsNew]int32{0, s.agent.componentTag, groupID, fitTag}}
 		mi = data_model.MapKeyItemMultiItem(&bucket.MultiItems, key, config.StringTopCapacity, nil)
 		mi.Tail.Value.AddValueCounterHost(float64(sizeAfter), 1, 0)
 	}

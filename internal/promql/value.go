@@ -589,7 +589,7 @@ func decodeTagIndexLegacy(i int) (ix int, id string, ok bool) {
 		return 0, "", false
 	}
 	ix = i - SeriesTagIndexOffset
-	if 0 <= ix && ix < format.MaxTags {
+	if 0 <= ix && ix < format.MaxTagsNew {
 		id, ok = format.TagIDLegacy(ix), true
 	} else if i == format.StringTopTagIndex {
 		id, ok = format.LegacyStringTopTagID, true

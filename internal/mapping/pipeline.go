@@ -285,6 +285,14 @@ func (mp *mapPipeline) mapTags(h *data_model.MappedMetricHeader, metric *tlstats
 				h.TagSetTwiceKey = tagIDKey
 			}
 			h.IsSKeySet = true
+		case tagInfo.IsLong:
+			id, ok := format.ContainsLongRawTagValue(mem.B(v.Value)) // TODO - remove allocation in case of error
+			if !ok {
+				h.InvalidRawValue = v.Value
+				h.InvalidLongTagKey = tagIDKey
+				continue
+			}
+			h.SetLongKey(tagInfo.Index, id, tagIDKey)
 		case tagInfo.Raw:
 			id, ok := format.ContainsRawTagValue(mem.B(v.Value)) // TODO - remove allocation in case of error
 			if !ok {
@@ -294,6 +302,7 @@ func (mp *mapPipeline) mapTags(h *data_model.MappedMetricHeader, metric *tlstats
 				continue
 			}
 			h.SetKey(tagInfo.Index, id, tagIDKey)
+
 		case len(v.Value) == 0: // TODO - move knowledge about "" <-> 0 mapping to more general place
 			h.SetKey(tagInfo.Index, 0, tagIDKey) // we interpret "0" => "vasya", "0" => "" as second one overriding the first, generating a warning
 		default:

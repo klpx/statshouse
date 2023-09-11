@@ -6,6 +6,7 @@ import (
 	"github.com/vkcom/statshouse-go"
 	"github.com/vkcom/statshouse/internal/data_model/gen2/tl"
 	"github.com/vkcom/statshouse/internal/data_model/gen2/tlstatshouse"
+	"github.com/vkcom/statshouse/internal/format"
 	"github.com/vkcom/statshouse/internal/receiver"
 )
 
@@ -14,6 +15,7 @@ type MetricWriter interface {
 	WriteSystemMetricCount(nowUnix int64, name string, count float64, tagsList ...int32)
 	WriteSystemMetricCountValue(nowUnix int64, name string, count, value float64, tagsList ...int32)
 	WriteSystemMetricValueWithoutHost(nowUnix int64, name string, value float64, tagsList ...int32)
+	Delete(nowUnix int64, name string, value float64, tagsList ...int32)
 }
 
 type MetricWriterRemoteImpl struct {
@@ -83,6 +85,9 @@ func (p *MetricWriterRemoteImpl) WriteSystemMetricCount(nowUnix int64, name stri
 	statshouse.Metric(name, tags).Count(count)
 }
 
+func (p *MetricWriterRemoteImpl) Delete(nowUnix int64, name string, value float64, tagsList ...int32) {
+}
+
 func (p *MetricWriterSHImpl) fillCommonMetric(m *tlstatshouse.MetricBytes, useHost bool, name string, nowUnix int64, tagsList ...int32) {
 	m.Reset()
 	m.Name = append(m.Name, name...)
@@ -132,5 +137,52 @@ func (p *MetricWriterSHImpl) WriteSystemMetricCount(nowUnix int64, name string, 
 	m := p.metric
 	p.fillCommonMetric(m, true, name, nowUnix, tagsList...)
 	m.Counter = count
+	_, _ = p.handler.HandleMetrics(m, nil)
+}
+
+var g = true
+
+func (p *MetricWriterSHImpl) Delete(nowUnix int64, name string, value float64, tagsList ...int32) {
+	m := p.metric
+	p.fillCommonMetric(m, false, name, nowUnix, tagsList...)
+	m.Value = append(m.Value, value)
+	if g {
+		g = false
+		m.Tags = append(m.Tags, tl.DictionaryFieldStringBytes{
+			Key:   []byte(format.LongTagPrefix + "0"),
+			Value: []byte("100000000000"),
+		})
+		m.Tags = append(m.Tags, tl.DictionaryFieldStringBytes{
+			Key:   []byte(format.LongTagPrefix + "1"),
+			Value: []byte("100000000001"),
+		})
+		m.Tags = append(m.Tags, tl.DictionaryFieldStringBytes{
+			Key:   []byte(format.LongTagPrefix + "2"),
+			Value: []byte("100000000002"),
+		})
+		m.Tags = append(m.Tags, tl.DictionaryFieldStringBytes{
+			Key:   []byte(format.LongTagPrefix + "3"),
+			Value: []byte("100000000003"),
+		})
+	} else {
+		m.Tags = append(m.Tags, tl.DictionaryFieldStringBytes{
+			Key:   []byte(format.LongTagPrefix + "0"),
+			Value: []byte("100000000003"),
+		})
+		m.Tags = append(m.Tags, tl.DictionaryFieldStringBytes{
+			Key:   []byte(format.LongTagPrefix + "1"),
+			Value: []byte("100000000002"),
+		})
+		m.Tags = append(m.Tags, tl.DictionaryFieldStringBytes{
+			Key:   []byte(format.LongTagPrefix + "2"),
+			Value: []byte("100000000001"),
+		})
+		m.Tags = append(m.Tags, tl.DictionaryFieldStringBytes{
+			Key:   []byte(format.LongTagPrefix + "3"),
+			Value: []byte("100000000000"),
+		})
+		g = true
+	}
+
 	_, _ = p.handler.HandleMetrics(m, nil)
 }

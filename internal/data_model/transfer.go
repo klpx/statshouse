@@ -17,7 +17,18 @@ import (
 
 func (k *Key) ToSlice() []int32 {
 	result := append([]int32{}, k.Keys[:]...)
-	i := format.MaxTags
+	i := format.MaxTagsNew
+	for ; i != 0; i-- {
+		if result[i-1] != 0 {
+			break
+		}
+	}
+	return result[:i]
+}
+
+func (k *Key) ToLongSlice() []int64 {
+	result := append([]int64{}, k.LongKeys[:]...)
+	i := format.MaxLongTags
 	for ; i != 0; i-- {
 		if result[i-1] != 0 {
 			break
@@ -40,11 +51,12 @@ func KeyFromStatshouseMultiItem(item *tlstatshouse.MultiItemBytes, bucketTimesta
 	}
 	key.Metric = item.Metric
 	copy(key.Keys[:], item.Keys)
+	copy(key.LongKeys[:], item.LongKeys)
 	return key, int(sID)
 }
 
 func (k *Key) TLSizeEstimate(defaultTimestamp uint32) int {
-	i := format.MaxTags
+	i := format.MaxTagsNew
 	for ; i != 0; i-- {
 		if k.Keys[i-1] != 0 {
 			break
@@ -58,10 +70,14 @@ func (k *Key) TLSizeEstimate(defaultTimestamp uint32) int {
 }
 
 func (k *Key) TLMultiItemFromKey(defaultTimestamp uint32) tlstatshouse.MultiItem {
+	if k.Metric == 1 {
+		k.Metric = 1
+	}
 	item := tlstatshouse.MultiItem{
 		Metric: k.Metric,
 		Keys:   k.ToSlice(),
 	}
+	item.SetLongKeys(k.ToLongSlice())
 	// TODO - check that timestamp is never 0 here
 	if k.Timestamp != 0 && k.Timestamp != defaultTimestamp {
 		item.SetT(k.Timestamp)

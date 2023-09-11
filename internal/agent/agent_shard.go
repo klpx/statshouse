@@ -121,23 +121,23 @@ func (s *ShardReplica) InitBuiltInMetric() {
 	// Unfortunately we do not know aggregator host tag.
 	s.successTestConnectionDurationBucket = s.agent.CreateBuiltInItemValue(data_model.AggKey(0,
 		format.BuiltinMetricIDSrcTestConnection,
-		[16]int32{0, s.agent.componentTag, format.TagOKConnection}, 0, s.ShardKey, s.ReplicaKey))
+		[format.MaxTagsNew]int32{0, s.agent.componentTag, format.TagOKConnection}, 0, s.ShardKey, s.ReplicaKey))
 	s.noConnectionTestConnectionDurationBucket = s.agent.CreateBuiltInItemValue(data_model.AggKey(0,
 		format.BuiltinMetricIDSrcTestConnection,
-		[16]int32{0, s.agent.componentTag, format.TagNoConnection}, 0, s.ShardKey, s.ReplicaKey))
+		[format.MaxTagsNew]int32{0, s.agent.componentTag, format.TagNoConnection}, 0, s.ShardKey, s.ReplicaKey))
 	s.failedTestConnectionDurationBucket = s.agent.CreateBuiltInItemValue(data_model.AggKey(0,
 		format.BuiltinMetricIDSrcTestConnection,
-		[16]int32{0, s.agent.componentTag, format.TagOtherError}, 0, s.ShardKey, s.ReplicaKey))
+		[format.MaxTagsNew]int32{0, s.agent.componentTag, format.TagOtherError}, 0, s.ShardKey, s.ReplicaKey))
 	s.rpcErrorTestConnectionDurationBucket = s.agent.CreateBuiltInItemValue(data_model.AggKey(0,
 		format.BuiltinMetricIDSrcTestConnection,
-		[16]int32{0, s.agent.componentTag, format.TagRPCError}, 0, s.ShardKey, s.ReplicaKey))
+		[format.MaxTagsNew]int32{0, s.agent.componentTag, format.TagRPCError}, 0, s.ShardKey, s.ReplicaKey))
 	s.timeoutTestConnectionDurationBucket = s.agent.CreateBuiltInItemValue(data_model.AggKey(0,
 		format.BuiltinMetricIDSrcTestConnection,
-		[16]int32{0, s.agent.componentTag, format.TagTimeoutError}, 0, s.ShardKey, s.ReplicaKey))
+		[format.MaxTagsNew]int32{0, s.agent.componentTag, format.TagTimeoutError}, 0, s.ShardKey, s.ReplicaKey))
 
 	s.aggTimeDiffBucket = s.agent.CreateBuiltInItemValue(data_model.AggKey(0,
 		format.BuiltinMetricIDAggTimeDiff,
-		[16]int32{0, s.agent.componentTag}, 0, s.ShardKey, s.ReplicaKey))
+		[format.MaxTagsNew]int32{0, s.agent.componentTag}, 0, s.ShardKey, s.ReplicaKey))
 }
 
 func (s *ShardReplica) HistoricBucketsDataSizeMemory() int {
@@ -364,7 +364,7 @@ func (s *ShardReplica) addBuiltInsLocked(nowUnix uint32) {
 	// sending is once per minute when no changes, but immediate sending of journal version each second when it changed
 	// standard metrics do not allow this, but heartbeats are magic.
 	writeJournalVersion := func(version int64, hash string, hashTag int32, count float64) {
-		key := s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDJournalVersions, [16]int32{0, s.agent.componentTag, 0, 0, 0, int32(version), hashTag})
+		key := s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDJournalVersions, [format.MaxTagsNew]int32{0, s.agent.componentTag, 0, 0, 0, int32(version), hashTag})
 		mi := data_model.MapKeyItemMultiItem(&resolutionShard.MultiItems, key, s.config.StringTopCapacity, nil)
 		mi.MapStringTop(hash, count).AddCounterHost(count, 0)
 	}
@@ -399,11 +399,11 @@ func (s *ShardReplica) addBuiltInsLocked(nowUnix uint32) {
 	userTime := float64(s.agent.rUsage.Utime.Nano()-prevRUsage.Utime.Nano()) / float64(time.Second)
 	sysTime := float64(s.agent.rUsage.Stime.Nano()-prevRUsage.Stime.Nano()) / float64(time.Second)
 
-	key := s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDUsageCPU, [16]int32{0, s.agent.componentTag, format.TagValueIDCPUUsageUser})
+	key := s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDUsageCPU, [format.MaxTagsNew]int32{0, s.agent.componentTag, format.TagValueIDCPUUsageUser})
 	mi := data_model.MapKeyItemMultiItem(&resolutionShard.MultiItems, key, s.config.StringTopCapacity, nil)
 	mi.Tail.AddValueCounterHost(userTime, 1, 0)
 
-	key = s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDUsageCPU, [16]int32{0, s.agent.componentTag, format.TagValueIDCPUUsageSys})
+	key = s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDUsageCPU, [format.MaxTagsNew]int32{0, s.agent.componentTag, format.TagValueIDCPUUsageSys})
 	mi = data_model.MapKeyItemMultiItem(&resolutionShard.MultiItems, key, s.config.StringTopCapacity, nil)
 	mi.Tail.AddValueCounterHost(sysTime, 1, 0)
 
@@ -421,7 +421,7 @@ func (s *ShardReplica) addBuiltInsLocked(nowUnix uint32) {
 		rss = float64(st.Res)
 	}
 
-	key = s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDUsageMemory, [16]int32{0, s.agent.componentTag})
+	key = s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDUsageMemory, [format.MaxTagsNew]int32{0, s.agent.componentTag})
 	mi = data_model.MapKeyItemMultiItem(&resolutionShard.MultiItems, key, s.config.StringTopCapacity, nil)
 	mi.Tail.AddValueCounterHost(rss, 60, 0)
 
@@ -431,7 +431,7 @@ func (s *ShardReplica) addBuiltInsLocked(nowUnix uint32) {
 func (s *ShardReplica) addBuiltInsHeartbeatsLocked(resolutionShard *data_model.MetricsBucket, nowUnix uint32, count float64) {
 	uptimeSec := float64(nowUnix - s.agent.startTimestamp)
 
-	key := s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDHeartbeatVersion, [16]int32{0, s.agent.componentTag, s.agent.heartBeatEventType})
+	key := s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDHeartbeatVersion, [format.MaxTagsNew]int32{0, s.agent.componentTag, s.agent.heartBeatEventType})
 	mi := data_model.MapKeyItemMultiItem(&resolutionShard.MultiItems, key, s.config.StringTopCapacity, nil)
 	mi.MapStringTop(build.Commit(), count).AddValueCounterHost(uptimeSec, count, 0)
 
@@ -441,7 +441,7 @@ func (s *ShardReplica) addBuiltInsHeartbeatsLocked(resolutionShard *data_model.M
 		if i >= len(heartbitIDs) {
 			break
 		}
-		key = s.agent.AggKey(resolutionShard.Time, heartbitIDs[i], [16]int32{0, s.agent.componentTag, s.agent.heartBeatEventType})
+		key = s.agent.AggKey(resolutionShard.Time, heartbitIDs[i], [format.MaxTagsNew]int32{0, s.agent.componentTag, s.agent.heartBeatEventType})
 		mi = data_model.MapKeyItemMultiItem(&resolutionShard.MultiItems, key, s.config.StringTopCapacity, nil)
 		mi.MapStringTopBytes(args, count).AddValueCounterHost(uptimeSec, count, 0)
 	}

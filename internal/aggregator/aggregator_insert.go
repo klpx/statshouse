@@ -29,9 +29,12 @@ import (
 )
 
 func getTableDesc() string {
-	keysFieldsNamesVec := make([]string, format.MaxTags)
-	for i := 0; i < format.MaxTags; i++ {
+	keysFieldsNamesVec := make([]string, format.MaxTagsNew+format.MaxLongTags)
+	for i := 0; i < format.MaxTagsNew; i++ {
 		keysFieldsNamesVec[i] = fmt.Sprintf(`key%d`, i)
+	}
+	for i := 0; i < format.MaxLongTags; i++ {
+		keysFieldsNamesVec[format.MaxTagsNew+i] = fmt.Sprintf(`raw_key%d`, i)
 	}
 	return `statshouse_value_incoming_prekey3(metric,prekey,prekey_set,time,` + strings.Join(keysFieldsNamesVec, `,`) + `,count,min,max,sum,sumsquare,percentiles,uniq_state,skey,min_host,max_host)`
 }
@@ -115,7 +118,7 @@ func (p *metricIndexCache) skips(metricID int32) (skipMaxHost bool, skipMinHost 
 }
 
 func appendKeys(res []byte, k data_model.Key, metricCache *metricIndexCache, usedTimestamps map[uint32]struct{}) []byte {
-	var tmp [4 + 4 + 1 + 4 + format.MaxTags*4]byte // metric, prekey, prekey_set, time
+	var tmp [4 + 4 + 1 + 4 + format.MaxTagsNew*4 + format.MaxLongTags*8]byte // metric, prekey, prekey_set, time
 	binary.LittleEndian.PutUint32(tmp[0:], uint32(k.Metric))
 	prekeyIndex, prekeyOnly := metricCache.getPrekeyIndex(k.Metric)
 	if prekeyIndex >= 0 {
@@ -132,6 +135,11 @@ func appendKeys(res []byte, k data_model.Key, metricCache *metricIndexCache, use
 	}
 	for ki, key := range k.Keys {
 		binary.LittleEndian.PutUint32(tmp[13+ki*4:], uint32(key))
+	}
+	start := 13 + (format.MaxTagsNew * 4)
+	for ki, key := range k.LongKeys {
+		ix := start + ki*8
+		binary.LittleEndian.PutUint64(tmp[ix:], uint64(key))
 	}
 	return append(res, tmp[:]...)
 }
@@ -173,23 +181,23 @@ func appendBadge(res []byte, k data_model.Key, v data_model.ItemValue, metricCac
 			format.TagValueIDSrcIngestionStatusWarnMapTagSetTwice,
 			format.TagValueIDSrcIngestionStatusWarnOldCounterSemantic,
 			format.TagValueIDSrcIngestionStatusWarnMapInvalidRawTagValue:
-			return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [16]int32{0, format.TagValueIDBadgeIngestionWarnings, k.Keys[1]}}, "", data_model.ItemValue{Counter: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
+			return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDBadgeIngestionWarnings, k.Keys[1]}}, "", data_model.ItemValue{Counter: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
 		}
-		res = appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [16]int32{0, format.TagValueIDBadgeIngestionErrorsOld, k.Keys[1]}}, "", data_model.ItemValue{Counter: 1, ValueSum: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
-		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [16]int32{0, format.TagValueIDBadgeIngestionErrors, k.Keys[1]}}, "", data_model.ItemValue{Counter: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
+		res = appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDBadgeIngestionErrorsOld, k.Keys[1]}}, "", data_model.ItemValue{Counter: 1, ValueSum: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
+		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDBadgeIngestionErrors, k.Keys[1]}}, "", data_model.ItemValue{Counter: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
 	case format.BuiltinMetricIDAgentSamplingFactor:
-		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [16]int32{0, format.TagValueIDBadgeAgentSamplingFactor, k.Keys[1]}}, "", v, metricCache, usedTimestamps)
+		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDBadgeAgentSamplingFactor, k.Keys[1]}}, "", v, metricCache, usedTimestamps)
 	case format.BuiltinMetricIDAggSamplingFactor:
-		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [16]int32{0, format.TagValueIDBadgeAggSamplingFactor, k.Keys[4]}}, "", v, metricCache, usedTimestamps)
+		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDBadgeAggSamplingFactor, k.Keys[4]}}, "", v, metricCache, usedTimestamps)
 	case format.BuiltinMetricIDAggMappingCreated:
 		if k.Keys[5] == format.TagValueIDAggMappingCreatedStatusOK ||
 			k.Keys[5] == format.TagValueIDAggMappingCreatedStatusCreated {
 			return res
 		}
-		res = appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [16]int32{0, format.TagValueIDBadgeAggMappingErrorsOld, k.Keys[4]}}, "", data_model.ItemValue{Counter: 1, ValueSum: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
-		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [16]int32{0, format.TagValueIDBadgeAggMappingErrors, k.Keys[4]}}, "", data_model.ItemValue{Counter: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
+		res = appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDBadgeAggMappingErrorsOld, k.Keys[4]}}, "", data_model.ItemValue{Counter: 1, ValueSum: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
+		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDBadgeAggMappingErrors, k.Keys[4]}}, "", data_model.ItemValue{Counter: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
 	case format.BuiltinMetricIDAggBucketReceiveDelaySec:
-		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [16]int32{0, format.TagValueIDBadgeContributors, 0}}, "", data_model.ItemValue{Counter: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
+		return appendValueStat(res, data_model.Key{Timestamp: ts, Metric: format.BuiltinMetricIDBadges, Keys: [format.MaxTagsNew]int32{0, format.TagValueIDBadgeContributors, 0}}, "", data_model.ItemValue{Counter: v.Counter, MaxHostTag: v.MaxHostTag}, metricCache, usedTimestamps)
 	}
 	return res
 }
@@ -444,33 +452,33 @@ func (a *Aggregator) RowDataMarshalAppendPositions(b *aggregatorBucket, rnd *ran
 	}
 	resPos := len(res)
 	for k, sf := range sampleFactors {
-		key := data_model.AggKey(b.time, format.BuiltinMetricIDAggSamplingFactor, [16]int32{0, 0, 0, 0, k, format.TagValueIDAggSamplingFactorReasonInsertSize}, a.aggregatorHost, a.shardKey, a.replicaKey)
+		key := data_model.AggKey(b.time, format.BuiltinMetricIDAggSamplingFactor, [format.MaxTagsNew]int32{0, 0, 0, 0, k, format.TagValueIDAggSamplingFactorReasonInsertSize}, a.aggregatorHost, a.shardKey, a.replicaKey)
 		res = appendBadge(res, key, data_model.ItemValue{Counter: 1, ValueSum: sf}, metricCache, usedTimestamps)
 		res = appendSimpleValueStat(res, key, sf, 1, a.aggregatorHost, metricCache, usedTimestamps)
 	}
-	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [16]int32{0, 0, 0, 0, key1, format.TagValueIDSizeCounter},
+	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [format.MaxTagsNew]int32{0, 0, 0, 0, key1, format.TagValueIDSizeCounter},
 		a.aggregatorHost, a.shardKey, a.replicaKey), float64(sizeCounters), 1, a.aggregatorHost, metricCache, usedTimestamps)
-	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [16]int32{0, 0, 0, 0, key1, format.TagValueIDSizeValue},
+	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [format.MaxTagsNew]int32{0, 0, 0, 0, key1, format.TagValueIDSizeValue},
 		a.aggregatorHost, a.shardKey, a.replicaKey), float64(sizeValues), 1, a.aggregatorHost, metricCache, usedTimestamps)
-	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [16]int32{0, 0, 0, 0, key1, format.TagValueIDSizePercentiles},
+	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [format.MaxTagsNew]int32{0, 0, 0, 0, key1, format.TagValueIDSizePercentiles},
 		a.aggregatorHost, a.shardKey, a.replicaKey), float64(sizePercentiles), 1, a.aggregatorHost, metricCache, usedTimestamps)
-	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [16]int32{0, 0, 0, 0, key1, format.TagValueIDSizeUnique},
+	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [format.MaxTagsNew]int32{0, 0, 0, 0, key1, format.TagValueIDSizeUnique},
 		a.aggregatorHost, a.shardKey, a.replicaKey), float64(sizeUniques), 1, a.aggregatorHost, metricCache, usedTimestamps)
 
 	insertTimeUnix := uint32(time.Now().Unix()) // same quality as timestamp from advanceBuckets, can be larger or smaller
 	for t := range usedTimestamps {
-		key := data_model.Key{Timestamp: insertTimeUnix, Metric: format.BuiltinMetricIDContributorsLog, Keys: [16]int32{0, int32(t)}}
+		key := data_model.Key{Timestamp: insertTimeUnix, Metric: format.BuiltinMetricIDContributorsLog, Keys: [format.MaxTagsNew]int32{0, int32(t)}}
 		res = appendSimpleValueStat(res, key, float64(insertTimeUnix)-float64(t), 1, a.aggregatorHost, metricCache, nil)
-		key = data_model.Key{Timestamp: t, Metric: format.BuiltinMetricIDContributorsLogRev, Keys: [16]int32{0, int32(insertTimeUnix)}}
+		key = data_model.Key{Timestamp: t, Metric: format.BuiltinMetricIDContributorsLogRev, Keys: [format.MaxTagsNew]int32{0, int32(insertTimeUnix)}}
 		res = appendSimpleValueStat(res, key, float64(insertTimeUnix)-float64(t), 1, a.aggregatorHost, metricCache, nil)
 	}
 
 	sizeBuiltin += len(res) - resPos
 	resPos = len(res)
-	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [16]int32{0, 0, 0, 0, key1, format.TagValueIDSizeStringTop},
+	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [format.MaxTagsNew]int32{0, 0, 0, 0, key1, format.TagValueIDSizeStringTop},
 		a.aggregatorHost, a.shardKey, a.replicaKey), float64(sizeStringTops), 1, a.aggregatorHost, metricCache, usedTimestamps)
 	sizeBuiltin += (len(res) - resPos) * 2 // hypothesis - next line inserts as many bytes as previous one
-	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [16]int32{0, 0, 0, 0, key1, format.TagValueIDSizeBuiltIn},
+	res = appendSimpleValueStat(res, data_model.AggKey(b.time, format.BuiltinMetricIDAggInsertSize, [format.MaxTagsNew]int32{0, 0, 0, 0, key1, format.TagValueIDSizeBuiltIn},
 		a.aggregatorHost, a.shardKey, a.replicaKey), float64(sizeBuiltin), 1, a.aggregatorHost, metricCache, usedTimestamps)
 	return res
 }

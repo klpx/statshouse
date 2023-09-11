@@ -26,7 +26,8 @@ type (
 	Key struct {
 		Timestamp uint32
 		Metric    int32
-		Keys      [format.MaxTags]int32 // Unused keys are set to special 0-value
+		Keys      [format.MaxTagsNew]int32 // Unused keys are set to special 0-value
+		LongKeys  [format.MaxLongTags]int64
 	}
 
 	ItemValue struct {
@@ -74,7 +75,7 @@ func (k Key) WithAgentEnvRouteArch(agentEnvTag int32, routeTag int32, buildArchT
 	return k
 }
 
-func AggKey(t uint32, m int32, k [format.MaxTags]int32, hostTag int32, shardTag int32, replicaTag int32) Key {
+func AggKey(t uint32, m int32, k [format.MaxTagsNew]int32, hostTag int32, shardTag int32, replicaTag int32) Key {
 	key := Key{Timestamp: t, Metric: m, Keys: k}
 	key.Keys[format.AggHostTag] = hostTag
 	key.Keys[format.AggShardTag] = shardTag
@@ -449,7 +450,7 @@ func (s *MultiValue) RowBinarySizeEstimate() int {
 	if s.Empty() {
 		return 0
 	}
-	size := 4 + 4 + format.MaxTags*4 + // time, metric, keys
+	size := 4 + 4 + format.MaxTagsNew*4 + // time, metric, keys
 		5*8 + // Aggregates
 		1 + 1 + // centroids count byte, unique, string size byte
 		10 // max_host

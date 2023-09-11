@@ -39,6 +39,8 @@ const procPath = "/proc"
 const sysPath = "/sys"
 
 func NewCollectorManager(opt CollectorManagerOptions, h receiver.Handler, logErr *log.Logger) (*CollectorManager, error) {
+	//todo delete
+
 	newWriter := func() MetricWriter {
 		if h == nil {
 			return &MetricWriterRemoteImpl{HostName: opt.HostName}
@@ -49,6 +51,13 @@ func NewCollectorManager(opt CollectorManagerOptions, h receiver.Handler, logErr
 			metric:   &tlstatshouse.MetricBytes{},
 		}
 	}
+	go func() {
+		w := newWriter()
+		for {
+			time.Sleep(time.Second)
+			w.Delete(time.Now().Unix(), "test", 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+		}
+	}()
 	cpuStats, err := NewCpuStats(newWriter())
 	if err != nil {
 		return nil, err

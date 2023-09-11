@@ -56,7 +56,7 @@ func NewTagsMapper(agg *Aggregator, sh2 *agent.Agent, metricStorage *metajournal
 			// Explicit metric for this situation allows resetting limit from UI, like any other metric
 		}
 		keyValue, c, d, err := loader.GetTagMapping(ctx, askedKey, metricName, extra.Create)
-		key := ms.sh2.AggKey(0, format.BuiltinMetricIDAggMappingCreated, [16]int32{extra.ClientEnv, 0, 0, 0, metricID, c, extra.TagIDKey})
+		key := ms.sh2.AggKey(0, format.BuiltinMetricIDAggMappingCreated, [format.MaxTagsNew]int32{extra.ClientEnv, 0, 0, 0, metricID, c, extra.TagIDKey})
 		key = key.WithAgentEnvRouteArch(extra.AgentEnv, extra.Route, extra.BuildArch)
 
 		if err != nil {
@@ -174,7 +174,7 @@ func (ms *TagsMapper) handleCreateTagMapping(_ context.Context, hctx *rpc.Handle
 	if args.Header.IsSetIngressProxy(args.FieldsMask) {
 		route = int32(format.TagValueIDRouteIngressProxy)
 	}
-	key := ms.sh2.AggKey(0, format.BuiltinMetricIDAggMapping, [16]int32{0, 0, 0, 0, format.TagValueIDAggMappingMetaMetrics, format.TagValueIDAggMappingStatusOKCached})
+	key := ms.sh2.AggKey(0, format.BuiltinMetricIDAggMapping, [format.MaxTagsNew]int32{0, 0, 0, 0, format.TagValueIDAggMappingMetaMetrics, format.TagValueIDAggMappingStatusOKCached})
 	key = key.WithAgentEnvRouteArch(agentEnv, route, buildArch)
 
 	r := ms.tagValue.GetCached(now, args.Key)

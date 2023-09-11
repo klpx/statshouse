@@ -39,7 +39,7 @@ statshouse.multi_item#0c803e07
     fields_mask: # // contains shard num in top 8 bits
     metric: int
     keys: (vector int)
-
+    long_keys: fields_mask.12?(vector long)
     t: fields_mask.10?# // timestamp, should be rare
 
     tail: (statshouse.multi_value fields_mask) // no fields_mask, because anyway uses 0 bytes if counter with 0.0 or 1.0

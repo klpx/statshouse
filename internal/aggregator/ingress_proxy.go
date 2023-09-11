@@ -113,7 +113,7 @@ func (proxy *IngressProxy) handler(ctx context.Context, hctx *rpc.HandlerContext
 	keyIDTag := int32(binary.BigEndian.Uint32(keyID[:4]))
 	key := data_model.Key{
 		Metric: format.BuiltinMetricIDRPCRequests,
-		Keys:   [16]int32{0, format.TagValueIDComponentIngressProxy, int32(tag), format.TagValueIDRPCRequestsStatusOK, 0, 0, keyIDTag},
+		Keys:   [format.MaxTagsNew]int32{0, format.TagValueIDComponentIngressProxy, int32(tag), format.TagValueIDRPCRequestsStatusOK, 0, 0, keyIDTag},
 	}
 	isLocal, err := proxy.handlerImpl(ctx, hctx)
 	if err != nil && isLocal {

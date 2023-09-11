@@ -115,8 +115,8 @@ type SeriesQuery struct {
 	GroupBy []string
 
 	// Filtering
-	FilterIn   [format.MaxTags]map[int32]string // tag index -> tag value ID -> tag value
-	FilterOut  [format.MaxTags]map[int32]string // as above
+	FilterIn   [format.MaxTagsNew]map[int32]string // tag index -> tag value ID -> tag value
+	FilterOut  [format.MaxTagsNew]map[int32]string // as above
 	SFilterIn  []string
 	SFilterOut []string
 
