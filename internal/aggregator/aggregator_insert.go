@@ -36,7 +36,7 @@ func getTableDesc() string {
 	for i := 0; i < format.MaxLongTags; i++ {
 		keysFieldsNamesVec[format.MaxTagsNew+i] = fmt.Sprintf(`raw_key%d`, i)
 	}
-	return `statshouse_value_incoming_prekey3(metric,prekey,prekey_set,time,` + strings.Join(keysFieldsNamesVec, `,`) + `,count,min,max,sum,sumsquare,percentiles,uniq_state,skey,min_host,max_host)`
+	return `statshouse_value_incoming_v2(metric,prekey,prekey_set,time,` + strings.Join(keysFieldsNamesVec, `,`) + `,count,min,max,sum,sumsquare,percentiles,uniq_state,skey,min_host,max_host)`
 }
 
 type lastMetricData struct {

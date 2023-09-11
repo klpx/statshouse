@@ -968,7 +968,7 @@ func getPromQuery(req seriesRequest, queryFn bool) (string, error) {
 
 func promqlGetBy(by []string) (string, error) {
 	var (
-		tags = make([]int, format.MaxTags)
+		tags = make([]int, format.MaxTagsNew)
 		skey bool
 	)
 	for _, v := range by {
@@ -980,7 +980,7 @@ func promqlGetBy(by []string) (string, error) {
 			skey = true
 			continue
 		}
-		if i := format.TagIndex(tid); 0 <= i && i < format.MaxTags {
+		if i := format.TagIndex(tid); 0 <= i && i < format.MaxTagsNew {
 			tags[i]++
 		}
 	}

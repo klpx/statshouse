@@ -190,6 +190,7 @@ type (
 		promEngineOn          bool
 		accessManager         *accessManager
 		querySelectTimeout    time.Duration
+		useNewTable           bool
 	}
 
 	//easyjson:json
@@ -2420,8 +2421,8 @@ func (h *Handler) handleGetQuery(ctx context.Context, ai accessInfo, req seriesR
 
 			for _, i := range sortedIxs {
 				tags := ixToTags[i]
-				kvs := make(map[string]SeriesMetaTag, 16)
-				for j := 0; j < format.MaxTags; j++ {
+				kvs := make(map[string]SeriesMetaTag, format.MaxTagsNew)
+				for j := 0; j < format.MaxTagsNew; j++ {
 					h.maybeAddQuerySeriesTagValue(kvs, metricMeta, req.version, q.by, j, tags.tag[j])
 				}
 				maybeAddQuerySeriesTagValueString(kvs, q.by, &tags.tagStr)
@@ -2689,8 +2690,8 @@ func (h *Handler) handleGetPoint(ctx context.Context, ai accessInfo, opt seriesR
 
 			for _, ix := range sortedIxs {
 				tags := ixToTags[ix]
-				kvs := make(map[string]SeriesMetaTag, 16)
-				for j := 0; j < format.MaxTags; j++ {
+				kvs := make(map[string]SeriesMetaTag, format.MaxTagsNew)
+				for j := 0; j < format.MaxTagsNew; j++ {
 					h.maybeAddQuerySeriesTagValue(kvs, metricMeta, req.version, q.by, j, tags.tag[j])
 				}
 				maybeAddQuerySeriesTagValueString(kvs, q.by, &tags.tagStr)
@@ -3778,7 +3779,7 @@ func (h *Handler) parseHTTPRequestS(r *http.Request, maxTabs int) (res []seriesR
 			)
 			if tagX < 0 {
 				tagID = format.StringTopTagID
-			} else if 0 <= tagX && tagX < format.MaxTags {
+			} else if 0 <= tagX && tagX < format.MaxTagsCount(h.useNewTable) {
 				tagID = format.TagID(tagX)
 			} else {
 				continue
@@ -4012,7 +4013,7 @@ func (h *Handler) parseHTTPRequestS(r *http.Request, maxTabs int) (res []seriesR
 			)
 			if tagX < 0 {
 				tagID = format.StringTopTagID
-			} else if 0 <= tagX && tagX < format.MaxTags {
+			} else if 0 <= tagX && tagX < format.MaxTagsCount(h.useNewTable) {
 				tagID = format.TagID(tagX)
 			} else {
 				continue

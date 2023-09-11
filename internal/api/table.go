@@ -79,8 +79,8 @@ func getTableFromLODs(ctx context.Context, lods []lodInfo, tableReqParams tableR
 				rowRepr.Time = rows[i].time
 				rowRepr.Tags = rowRepr.Tags[:0]
 				tags := &rows[i].tsTags
-				kvs := make(map[string]SeriesMetaTag, 16)
-				for j := 0; j < format.MaxTags; j++ {
+				kvs := make(map[string]SeriesMetaTag, format.MaxTagsNew)
+				for j := 0; j < format.MaxTagsNew; j++ {
 					wasAdded := maybeAddQuerySeriesTagValue(kvs, metricMeta, req.version, q.by, j, tags.tag[j])
 					if wasAdded {
 						rowRepr.Tags = append(rowRepr.Tags, RawTag{

@@ -105,7 +105,7 @@ func (ac *AutoCreate) autoCreateTag(bytes *tlstatshouse.MetricBytes, tagBytes []
 	if task == nil && taskCount >= autoCreateTaskLimit {
 		return errAutoCreateTaskLimitExceeded // fast path: RLock, no allocations
 	}
-	if tagCount >= format.MaxTags-1 {
+	if tagCount >= format.MaxTagsNew-1 {
 		return errAutoCreateTagLimitExceeded // fast path: RLock, no allocations
 	}
 	// slow path: Lock, might allocate
@@ -122,7 +122,7 @@ func (ac *AutoCreate) autoCreateTag(bytes *tlstatshouse.MetricBytes, tagBytes []
 	if _, ok := task.tags[string(tagBytes)]; ok {
 		return nil
 	}
-	if len(task.tags) >= format.MaxTags-1 {
+	if len(task.tags) >= format.MaxTagsNew-1 {
 		return errAutoCreateTagLimitExceeded
 	}
 	// remember tag insert order
@@ -222,7 +222,7 @@ func (ac *AutoCreate) synchronizeWithJournal(metric string, task *autoCreateTask
 		// set next attempt time
 		task.dueTime = now.Add(autoCreateRetryInterval)
 		// check there is at least one unmapped tag
-		found := len(meta.Tags) < format.MaxTags
+		found := len(meta.Tags) < format.MaxTagsNew
 		for i := 1; !found && i < len(meta.Tags); i++ {
 			found = len(meta.Tags[i].Name) == 0
 		}

@@ -1002,3 +1002,10 @@ func IsValidMetricType(typ_ string) bool {
 	}
 	return false
 }
+
+func MaxTagsCount(new bool) int {
+	if new {
+		return MaxTagsNew
+	}
+	return MaxTags
+}

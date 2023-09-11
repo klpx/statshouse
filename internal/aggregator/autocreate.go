@@ -130,7 +130,7 @@ func (ac *autoCreate) createMetric(args tlstatshouse.AutoCreate) error {
 	} else {
 		value = format.MetricMetaValue{
 			Name:       args.Metric,
-			Tags:       make([]format.MetricMetaTag, format.MaxTags),
+			Tags:       make([]format.MetricMetaTag, format.MaxTagsNew),
 			Visible:    true,
 			Kind:       args.Kind,
 			Resolution: 1,
@@ -177,7 +177,7 @@ tagMappingLoop:
 			case i < len(value.Tags):
 				value.Tags[i].Name = tagName
 				value.Tags[i].Description = ""
-			case i >= format.MaxTags:
+			case i >= format.MaxTagsNew:
 				break tagMappingLoop // all tags mapped
 			default:
 				value.Tags = append(value.Tags, format.MetricMetaTag{

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS statshouse_value_incoming_prekey3
+CREATE TABLE IF NOT EXISTS statshouse_value_incoming_v2
 (
     `metric` Int32,
     `prekey` Int32,
@@ -93,32 +93,8 @@ CREATE TABLE IF NOT EXISTS statshouse_value_1s_dist
     `max_host`       AggregateFunction(argMax, Int32, Float32)
     )
     ENGINE = AggregatingMergeTree()
-    PARTITION BY toStartOfInterval(time, INTERVAL 6 hour)
-    ORDER BY (metric, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11,
-              key12, key13, key14, key15, skey);
-
-CREATE TABLE IF NOT EXISTS statshouse_value_1s_prekey_dist
-(
-    `metric`         Int32,
-    `prekey`         Int32,
-    `time`           DateTime,
-    `key0`           Int32, `key1` Int32, `key2` Int32, `key3` Int32, `key4` Int32, `key5` Int32, `key6` Int32, `key7` Int32,
-    `key8`           Int32, `key9` Int32, `key10` Int32, `key11` Int32, `key12` Int32, `key13` Int32, `key14` Int32, `key15` Int32,
-    `skey`           String,
-    `count`          SimpleAggregateFunction(sum, Float64),
-    `min`            SimpleAggregateFunction(min, Float64),
-    `max`            SimpleAggregateFunction(max, Float64),
-    `sum`            SimpleAggregateFunction(sum, Float64),
-    `sumsquare`      SimpleAggregateFunction(sum, Float64),
-    `percentiles`    AggregateFunction(quantilesTDigest(0.5), Float32),
-    `uniq_state`     AggregateFunction(uniq, Int64),
-    `min_host`       AggregateFunction(argMin, Int32, Float32),
-    `max_host`       AggregateFunction(argMax, Int32, Float32)
-)
-    ENGINE = AggregatingMergeTree()
-    PARTITION BY toStartOfInterval(time, INTERVAL 6 hour)
-        ORDER BY (metric, prekey, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11,
-                                    key12, key13, key14, key15, skey);
+    PARTITION BY toStartOfInterval(time, INTERVAL 12 hour)
+    ORDER BY (metric, prekey, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15, key16, key17, key18, key19, key20, key21, key22, key23, key24, key25, key26, key27, key28, key29, key30, key31, raw_key0, raw_key1, raw_key2, raw_key3, skey);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_value_1s_agg3 TO statshouse_value_1s_dist AS
 SELECT metric,
@@ -136,34 +112,15 @@ SELECT metric,
        uniq_state,
        min_host,
        max_host
-FROM statshouse_value_incoming_prekey3
+FROM statshouse_value_incoming_v2
 WHERE (toDate(time) >= today() - 3)
-  AND (toDate(time) <= today() + 1) AND prekey_set <> 2 ;
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_value_1s_agg_prekey3 TO statshouse_value_1s_prekey_dist AS
-SELECT metric,
-    prekey,
-    prekey_set,
-    time,
-    key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15,
-    skey,
-    count,
-    min,
-    max,
-    sum,
-    sumsquare,
-    percentiles,
-    uniq_state,
-    min_host,
-    max_host
-FROM statshouse_value_incoming_prekey3
-WHERE (toDate(time) >= today() - 3)
-  AND (toDate(time) <= today() + 1) AND prekey_set > 0;
+  AND (toDate(time) <= today() + 1) ;
 
 -- Section per time resolution - 5s
 CREATE TABLE IF NOT EXISTS statshouse_value_1m_dist
 (
     `metric`         Int32,
+    `prekey`         Int32,
     `time`           DateTime,
     `key0`           Int32, `key1` Int32, `key2` Int32, `key3` Int32, `key4` Int32, `key5` Int32, `key6` Int32, `key7` Int32,
     `key8`           Int32, `key9` Int32, `key10` Int32, `key11` Int32, `key12` Int32, `key13` Int32, `key14` Int32, `key15` Int32,
@@ -199,33 +156,12 @@ CREATE TABLE IF NOT EXISTS statshouse_value_1m_dist
     `max_host`       AggregateFunction(argMax, Int32, Float32)
 )
     ENGINE = AggregatingMergeTree()
-        PARTITION BY toDate(time) ORDER BY (metric, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11,
-                                    key12, key13, key14, key15, skey);
-
-CREATE TABLE IF NOT EXISTS statshouse_value_1m_prekey_dist
-(
-    `metric`         Int32,
-    `prekey`         Int32,
-    `time`           DateTime,
-    `key0`           Int32, `key1` Int32, `key2` Int32, `key3` Int32, `key4` Int32, `key5` Int32, `key6` Int32, `key7` Int32,
-    `key8`           Int32, `key9` Int32, `key10` Int32, `key11` Int32, `key12` Int32, `key13` Int32, `key14` Int32, `key15` Int32,
-    `skey`           String,
-    `count`          SimpleAggregateFunction(sum, Float64),
-    `min`            SimpleAggregateFunction(min, Float64),
-    `max`            SimpleAggregateFunction(max, Float64),
-    `sum`            SimpleAggregateFunction(sum, Float64),
-    `sumsquare`      SimpleAggregateFunction(sum, Float64),
-    `percentiles`    AggregateFunction(quantilesTDigest(0.5), Float32),
-    `uniq_state`     AggregateFunction(uniq, Int64),
-    `min_host`       AggregateFunction(argMin, Int32, Float32),
-    `max_host`       AggregateFunction(argMax, Int32, Float32)
-)
-    ENGINE = AggregatingMergeTree()
-        PARTITION BY toDate(time) ORDER BY (metric, prekey, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11,
-                                    key12, key13, key14, key15, skey);
+        PARTITION BY toDate(time)
+    ORDER BY (metric, prekey, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15, key16, key17, key18, key19, key20, key21, key22, key23, key24, key25, key26, key27, key28, key29, key30, key31, raw_key0, raw_key1, raw_key2, raw_key3, skey);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_value_1m_agg3 TO statshouse_value_1m_dist AS
 SELECT metric,
+       prekey,
        toStartOfInterval(time, INTERVAL 1 minute)                             as time,
        key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15,
        key16,key17,key18,key19,key20,key21,key22,key23,key24,key25,key26,key27,key28,key29,key30,key31,
@@ -240,34 +176,15 @@ SELECT metric,
        uniq_state,
        min_host,
        max_host
-FROM statshouse_value_incoming_prekey3
+FROM statshouse_value_incoming_v2
 WHERE (toDate(time) >= today() - 3)
-  AND (toDate(time) <= today() + 1) AND prekey_set <> 2;
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_value_1m_agg_prekey3 TO statshouse_value_1m_prekey_dist AS
-SELECT metric,
-       prekey,
-       prekey_set,
-       toStartOfInterval(time, INTERVAL 1 minute)                             as time,
-       key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15,
-       skey,
-       count,
-       min,
-       max,
-       sum,
-       sumsquare,
-       percentiles,
-       uniq_state,
-       min_host,
-       max_host
-FROM statshouse_value_incoming_prekey3
-WHERE (toDate(time) >= today() - 3)
-  AND (toDate(time) <= today() + 1) AND prekey_set > 0;
+  AND (toDate(time) <= today() + 1);
 
 -- Section per time resolution - 1h
 CREATE TABLE IF NOT EXISTS statshouse_value_1h_dist
 (
     `metric`         Int32,
+    `prekey` Int32,
     `time`           DateTime,
     `key0`           Int32, `key1` Int32, `key2` Int32, `key3` Int32, `key4` Int32, `key5` Int32, `key6` Int32, `key7` Int32,
     `key8`           Int32, `key9` Int32, `key10` Int32, `key11` Int32, `key12` Int32, `key13` Int32, `key14` Int32, `key15` Int32,
@@ -303,33 +220,13 @@ CREATE TABLE IF NOT EXISTS statshouse_value_1h_dist
     `max_host`       AggregateFunction(argMax, Int32, Float32)
 )
     ENGINE = AggregatingMergeTree()
-        PARTITION BY toYYYYMM(time) ORDER BY (metric, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11,
-                                    key12, key13, key14, key15, skey);
+        PARTITION BY toYYYYMM(time)
+    ORDER BY (metric, prekey, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15, key16, key17, key18, key19, key20, key21, key22, key23, key24, key25, key26, key27, key28, key29, key30, key31, raw_key0, raw_key1, raw_key2, raw_key3, skey);
 
-CREATE TABLE IF NOT EXISTS statshouse_value_1h_prekey_dist
-(
-    `metric`         Int32,
-    `prekey`         Int32,
-    `time`           DateTime,
-    `key0`           Int32, `key1` Int32, `key2` Int32, `key3` Int32, `key4` Int32, `key5` Int32, `key6` Int32, `key7` Int32,
-    `key8`           Int32, `key9` Int32, `key10` Int32, `key11` Int32, `key12` Int32, `key13` Int32, `key14` Int32, `key15` Int32,
-    `skey`           String,
-    `count`          SimpleAggregateFunction(sum, Float64),
-    `min`            SimpleAggregateFunction(min, Float64),
-    `max`            SimpleAggregateFunction(max, Float64),
-    `sum`            SimpleAggregateFunction(sum, Float64),
-    `sumsquare`      SimpleAggregateFunction(sum, Float64),
-    `percentiles`    AggregateFunction(quantilesTDigest(0.5), Float32),
-    `uniq_state`     AggregateFunction(uniq, Int64),
-    `min_host`       AggregateFunction(argMin, Int32, Float32),
-    `max_host`       AggregateFunction(argMax, Int32, Float32)
-)
-    ENGINE = AggregatingMergeTree()
-        PARTITION BY toYYYYMM(time) ORDER BY (metric, prekey, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11,
-                                    key12, key13, key14, key15, skey);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_value_1h_agg3 TO statshouse_value_1h_dist AS
 SELECT metric,
+       prekey,
        toStartOfInterval(time, INTERVAL 1 hour)                             as time,
        key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15,
        key16,key17,key18,key19,key20,key21,key22,key23,key24,key25,key26,key27,key28,key29,key30,key31,
@@ -344,30 +241,9 @@ SELECT metric,
        uniq_state,
        min_host,
        max_host
-FROM statshouse_value_incoming_prekey3
+FROM statshouse_value_incoming_v2
 WHERE (toDate(time) >= today() - 3)
-  AND (toDate(time) <= today() + 1) AND prekey_set <> 2;
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_value_1h_agg_prekey3 TO statshouse_value_1h_prekey_dist AS
-SELECT metric,
-       prekey,
-       prekey_set,
-       toStartOfInterval(time, INTERVAL 1 hour)                             as time,
-       key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15,
-
-       skey,
-       count,
-       min,
-       max,
-       sum,
-       sumsquare,
-       percentiles,
-       uniq_state,
-       min_host,
-       max_host
-FROM statshouse_value_incoming_prekey3
-WHERE (toDate(time) >= today() - 3)
-  AND (toDate(time) <= today() + 1) AND prekey_set > 0;
+  AND (toDate(time) <= today() + 1);
 
 
 -- section for O(1) invalidation of contributors cache
@@ -394,7 +270,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_contributors_log_agg2 TO stats
 SELECT now() as insert_time,
     time,
     count
-FROM statshouse_value_incoming_prekey3
+FROM statshouse_value_incoming_v2
 WHERE (toDate(time) >= today() - 3)
   AND (toDate(time) <= today() + 1)
   AND (metric = -2);
@@ -428,7 +304,7 @@ SELECT metric,
        toStartOfInterval(time, INTERVAL 1 day)                             as time,
        1 as row_count,
        count
-FROM statshouse_value_incoming_prekey3
+FROM statshouse_value_incoming_v2
 WHERE (toDate(time) >= today() - 3)
   AND (toDate(time) <= today() + 1);
 
