@@ -436,7 +436,7 @@ func (s *ShardReplica) addBuiltInsHeartbeatsLocked(resolutionShard *data_model.M
 	mi.MapStringTop(build.Commit(), count).AddValueCounterHost(uptimeSec, count, 0)
 
 	// we send format.BuiltinMetricIDHeartbeatArgs only. Args1, Args2, Args3 are deprecated
-	key = s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDHeartbeatArgs, [16]int32{0, s.agent.componentTag, s.agent.heartBeatEventType, s.agent.argsHash, 0, 0, 0, 0, 0, s.agent.argsLen})
+	key = s.agent.AggKey(resolutionShard.Time, format.BuiltinMetricIDHeartbeatArgs, [format.MaxTagsNew]int32{0, s.agent.componentTag, s.agent.heartBeatEventType, s.agent.argsHash, 0, 0, 0, 0, 0, s.agent.argsLen})
 	mi = data_model.MapKeyItemMultiItem(&resolutionShard.MultiItems, key, s.config.StringTopCapacity, nil)
 	mi.MapStringTop(s.agent.args, count).AddValueCounterHost(uptimeSec, count, 0)
 }

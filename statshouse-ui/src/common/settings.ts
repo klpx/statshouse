@@ -59,6 +59,6 @@ if (meta !== null) {
 
 export const globalSettings: settings = metaSettings;
 export const pxPerChar = 8;
-export const maxTagsSize = 16; // max 32 or edit TAG_KEY enum
+export const maxTagsSize = 32; // max 32 or edit TAG_KEY enum
 
 export const buildVersion = document.querySelector('meta[name="build-version"]')?.getAttribute('content') ?? null;
