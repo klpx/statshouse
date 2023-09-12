@@ -1,9 +1,13 @@
 CREATE TABLE IF NOT EXISTS statshouse_value_incoming_v2
 (
+    `index` UInt8,
+    `unused_key0` Int32,
     `metric` Int32,
+    `unused_key1` Int32,
     `prekey` Int32,
-    `prekey_set` UInt8,
+    `unused_key2` Int32,
     `time` DateTime,
+    `unused_key3` Int32,
     `key0` Int32,
     `key1` Int32,
     `key2` Int32,
@@ -38,8 +42,12 @@ CREATE TABLE IF NOT EXISTS statshouse_value_incoming_v2
     `key31` Int32,
     `raw_key0` Int64,
     `raw_key1` Int64,
-    `raw_key2` Int64, -- можно использовать ключи не только как raw но и для отедльных ключей. Такиъх ключей может быть больше. Их можно переиспользовать
-    `raw_key3` Int64, -- TODO add more key
+    `raw_key2` Int64,
+    `raw_key3` Int64,
+    `raw_key4` Int64,
+    `raw_key5` Int64,
+    `raw_key6` Int64,
+    `raw_key7` Int64,
     `skey` String,
     `count` SimpleAggregateFunction(sum, Float64),
     `min` SimpleAggregateFunction(min, Float64),
@@ -56,9 +64,14 @@ ENGINE = Null;
 -- Section per time resolution - 1s
 CREATE TABLE IF NOT EXISTS statshouse_value_1s_dist
 (
-    `metric`         Int32,
-    `prekey`         Int32,
-    `time`           DateTime,
+    `index` UInt8,
+    `unused_key0` Int32,
+    `metric` Int32,
+    `unused_key1` Int32,
+    `prekey` Int32,
+    `unused_key2` Int32,
+    `time` DateTime,
+    `unused_key3` Int32,
     `key0`           Int32, `key1` Int32, `key2` Int32, `key3` Int32, `key4` Int32, `key5` Int32, `key6` Int32, `key7` Int32,
     `key8`           Int32, `key9` Int32, `key10` Int32, `key11` Int32, `key12` Int32, `key13` Int32, `key14` Int32, `key15` Int32,
     `key16` Int32,
@@ -79,8 +92,12 @@ CREATE TABLE IF NOT EXISTS statshouse_value_1s_dist
     `key31` Int32,
     `raw_key0` Int64,
     `raw_key1` Int64,
-    `raw_key2` Int64, -- можно использовать ключи не только как raw но и для отедльных ключей. Такиъх ключей может быть больше. Их можно переиспользовать
-    `raw_key3` Int64, -- TODO add more key
+    `raw_key2` Int64,
+    `raw_key3` Int64,
+    `raw_key4` Int64,
+    `raw_key5` Int64,
+    `raw_key6` Int64,
+    `raw_key7` Int64,
     `skey`           String,
     `count`          SimpleAggregateFunction(sum, Float64),
     `min`            SimpleAggregateFunction(min, Float64),
@@ -94,14 +111,20 @@ CREATE TABLE IF NOT EXISTS statshouse_value_1s_dist
     )
     ENGINE = AggregatingMergeTree()
     PARTITION BY toStartOfInterval(time, INTERVAL 12 hour)
-    ORDER BY (metric, prekey, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15, key16, key17, key18, key19, key20, key21, key22, key23, key24, key25, key26, key27, key28, key29, key30, key31, raw_key0, raw_key1, raw_key2, raw_key3, skey);
+    ORDER BY (index, unused_key0, metric, unused_key1, prekey, unused_key2, time, unused_key3,  key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15, key16, key17, key18, key19, key20, key21, key22, key23, key24, key25, key26, key27, key28, key29, key30, key31, raw_key0, raw_key1, raw_key2, raw_key3, skey);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_value_1s_agg3 TO statshouse_value_1s_dist AS
-SELECT metric,
+SELECT index,
+    unused_key0,
+       metric,
+    unused_key1,
+    prekey,
+    unused_key2,
        time,
+    unused_key3,
        key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15,
        key16,key17,key18,key19,key20,key21,key22,key23,key24,key25,key26,key27,key28,key29,key30,key31,
-       raw_key0,raw_key1,raw_key2,raw_key3,
+       raw_key0,raw_key1,raw_key2,raw_key3,raw_key4,raw_key5,raw_key6,raw_key7,
        skey,
        count,
        min,
@@ -119,9 +142,14 @@ WHERE (toDate(time) >= today() - 3)
 -- Section per time resolution - 5s
 CREATE TABLE IF NOT EXISTS statshouse_value_1m_dist
 (
-    `metric`         Int32,
-    `prekey`         Int32,
-    `time`           DateTime,
+    `index` UInt8,
+    `unused_key0` Int32,
+    `metric` Int32,
+    `unused_key1` Int32,
+    `prekey` Int32,
+    `unused_key2` Int32,
+    `time` DateTime,
+    `unused_key3` Int32,
     `key0`           Int32, `key1` Int32, `key2` Int32, `key3` Int32, `key4` Int32, `key5` Int32, `key6` Int32, `key7` Int32,
     `key8`           Int32, `key9` Int32, `key10` Int32, `key11` Int32, `key12` Int32, `key13` Int32, `key14` Int32, `key15` Int32,
     `key16` Int32,
@@ -142,8 +170,12 @@ CREATE TABLE IF NOT EXISTS statshouse_value_1m_dist
     `key31` Int32,
     `raw_key0` Int64,
     `raw_key1` Int64,
-    `raw_key2` Int64, -- можно использовать ключи не только как raw но и для отедльных ключей. Такиъх ключей может быть больше. Их можно переиспользовать
-    `raw_key3` Int64, -- TODO add more key
+    `raw_key2` Int64,
+    `raw_key3` Int64,
+    `raw_key4` Int64,
+    `raw_key5` Int64,
+    `raw_key6` Int64,
+    `raw_key7` Int64,
     `skey`           String,
     `count`          SimpleAggregateFunction(sum, Float64),
     `min`            SimpleAggregateFunction(min, Float64),
@@ -157,15 +189,20 @@ CREATE TABLE IF NOT EXISTS statshouse_value_1m_dist
 )
     ENGINE = AggregatingMergeTree()
         PARTITION BY toDate(time)
-    ORDER BY (metric, prekey, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15, key16, key17, key18, key19, key20, key21, key22, key23, key24, key25, key26, key27, key28, key29, key30, key31, raw_key0, raw_key1, raw_key2, raw_key3, skey);
+    ORDER BY (index, unused_key0, metric, unused_key1, prekey, unused_key2, time, unused_key3,  key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15, key16, key17, key18, key19, key20, key21, key22, key23, key24, key25, key26, key27, key28, key29, key30, key31, raw_key0, raw_key1, raw_key2, raw_key3, skey);
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_value_1m_agg3 TO statshouse_value_1m_dist AS
-SELECT metric,
-       prekey,
+SELECT index,
+    unused_key0,
+    metric,
+    unused_key1,
+    prekey,
+    unused_key2,
        toStartOfInterval(time, INTERVAL 1 minute)                             as time,
+    unused_key3,
        key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15,
        key16,key17,key18,key19,key20,key21,key22,key23,key24,key25,key26,key27,key28,key29,key30,key31,
-       raw_key0,raw_key1,raw_key2,raw_key3,
+       raw_key0,raw_key1,raw_key2,raw_key3,raw_key4,raw_key5,raw_key6,raw_key7,
        skey,
        count,
        min,
@@ -183,9 +220,14 @@ WHERE (toDate(time) >= today() - 3)
 -- Section per time resolution - 1h
 CREATE TABLE IF NOT EXISTS statshouse_value_1h_dist
 (
-    `metric`         Int32,
+    `index` UInt8,
+    `unused_key0` Int32,
+    `metric` Int32,
+    `unused_key1` Int32,
     `prekey` Int32,
-    `time`           DateTime,
+    `unused_key2` Int32,
+    `time` DateTime,
+    `unused_key3` Int32,
     `key0`           Int32, `key1` Int32, `key2` Int32, `key3` Int32, `key4` Int32, `key5` Int32, `key6` Int32, `key7` Int32,
     `key8`           Int32, `key9` Int32, `key10` Int32, `key11` Int32, `key12` Int32, `key13` Int32, `key14` Int32, `key15` Int32,
     `key16` Int32,
@@ -206,8 +248,12 @@ CREATE TABLE IF NOT EXISTS statshouse_value_1h_dist
     `key31` Int32,
     `raw_key0` Int64,
     `raw_key1` Int64,
-    `raw_key2` Int64, -- можно использовать ключи не только как raw но и для отедльных ключей. Такиъх ключей может быть больше. Их можно переиспользовать
-    `raw_key3` Int64, -- TODO add more key
+    `raw_key2` Int64,
+    `raw_key3` Int64,
+    `raw_key4` Int64,
+    `raw_key5` Int64,
+    `raw_key6` Int64,
+    `raw_key7` Int64,
     `skey`           String,
     `count`          SimpleAggregateFunction(sum, Float64),
     `min`            SimpleAggregateFunction(min, Float64),
@@ -221,16 +267,21 @@ CREATE TABLE IF NOT EXISTS statshouse_value_1h_dist
 )
     ENGINE = AggregatingMergeTree()
         PARTITION BY toYYYYMM(time)
-    ORDER BY (metric, prekey, time, key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15, key16, key17, key18, key19, key20, key21, key22, key23, key24, key25, key26, key27, key28, key29, key30, key31, raw_key0, raw_key1, raw_key2, raw_key3, skey);
+    ORDER BY (index, unused_key0, metric, unused_key1, prekey, unused_key2, time, unused_key3,  key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15, key16, key17, key18, key19, key20, key21, key22, key23, key24, key25, key26, key27, key28, key29, key30, key31, raw_key0, raw_key1, raw_key2, raw_key3, skey);
 
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS statshouse_value_1h_agg3 TO statshouse_value_1h_dist AS
-SELECT metric,
-       prekey,
+SELECT index,
+    unused_key0,
+    metric,
+    unused_key1,
+    prekey,
+    unused_key2,
        toStartOfInterval(time, INTERVAL 1 hour)                             as time,
+    unused_key3,
        key0, key1, key2, key3, key4, key5, key6, key7, key8, key9, key10, key11, key12, key13, key14, key15,
        key16,key17,key18,key19,key20,key21,key22,key23,key24,key25,key26,key27,key28,key29,key30,key31,
-       raw_key0,raw_key1,raw_key2,raw_key3,
+       raw_key0,raw_key1,raw_key2,raw_key3,raw_key4,raw_key5,raw_key6,raw_key7,
        skey,
        count,
        min,

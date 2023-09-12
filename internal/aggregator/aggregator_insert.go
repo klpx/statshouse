@@ -36,7 +36,7 @@ func getTableDesc() string {
 	for i := 0; i < format.MaxLongTags; i++ {
 		keysFieldsNamesVec[format.MaxTagsNew+i] = fmt.Sprintf(`raw_key%d`, i)
 	}
-	return `statshouse_value_incoming_v2(metric,prekey,prekey_set,time,` + strings.Join(keysFieldsNamesVec, `,`) + `,count,min,max,sum,sumsquare,percentiles,uniq_state,skey,min_host,max_host)`
+	return `statshouse_value_incoming_v2(index,unused_key0, metric, unused_key1,prekey,unused_key2,time,unused_key3,` + strings.Join(keysFieldsNamesVec, `,`) + `,count,min,max,sum,sumsquare,percentiles,uniq_state,skey,min_host,max_host)`
 }
 
 type lastMetricData struct {
@@ -118,28 +118,46 @@ func (p *metricIndexCache) skips(metricID int32) (skipMaxHost bool, skipMinHost 
 }
 
 func appendKeys(res []byte, k data_model.Key, metricCache *metricIndexCache, usedTimestamps map[uint32]struct{}) []byte {
-	var tmp [4 + 4 + 1 + 4 + format.MaxTagsNew*4 + format.MaxLongTags*8]byte // metric, prekey, prekey_set, time
-	binary.LittleEndian.PutUint32(tmp[0:], uint32(k.Metric))
+	const indexL = 1
+	const unusedKeysL = 4 * 4
+	const metricL = 4
+	const prekeyL = 4
+	const timeL = 4
+	var tmp [indexL + unusedKeysL + metricL + prekeyL + timeL + format.MaxTagsNew*4 + format.MaxLongTags*8]byte // metric, prekey, prekey_set, time
 	prekeyIndex, prekeyOnly := metricCache.getPrekeyIndex(k.Metric)
+	countToInsert := 1
+	var index byte
 	if prekeyIndex >= 0 {
-		binary.LittleEndian.PutUint32(tmp[4:], uint32(k.Keys[prekeyIndex]))
-		if prekeyOnly {
-			tmp[8] = 2
+		if !prekeyOnly {
+			countToInsert = 2
 		} else {
-			tmp[8] = 1
+			index = 1
 		}
 	}
-	binary.LittleEndian.PutUint32(tmp[9:], k.Timestamp)
-	if usedTimestamps != nil { // do not update map when writing map itself
-		usedTimestamps[k.Timestamp] = struct{}{} // TODO - optimize out bucket timestamp
-	}
-	for ki, key := range k.Keys {
-		binary.LittleEndian.PutUint32(tmp[13+ki*4:], uint32(key))
-	}
-	start := 13 + (format.MaxTagsNew * 4)
-	for ki, key := range k.LongKeys {
-		ix := start + ki*8
-		binary.LittleEndian.PutUint64(tmp[ix:], uint64(key))
+	for i := 0; i < countToInsert; i++ {
+		tmp[0] = index
+		binary.LittleEndian.PutUint32(tmp[1:], 0)
+		binary.LittleEndian.PutUint32(tmp[5:], uint32(k.Metric))
+		binary.LittleEndian.PutUint32(tmp[9:], 0)
+		if prekeyIndex >= 0 {
+			binary.LittleEndian.PutUint32(tmp[13:], uint32(k.Keys[prekeyIndex]))
+		}
+		binary.LittleEndian.PutUint32(tmp[17:], 0)
+		binary.LittleEndian.PutUint32(tmp[21:], k.Timestamp)
+		binary.LittleEndian.PutUint32(tmp[25:], 0)
+		if usedTimestamps != nil { // do not update map when writing map itself
+			usedTimestamps[k.Timestamp] = struct{}{} // TODO - optimize out bucket timestamp
+		}
+		const prefixL = indexL + unusedKeysL + metricL + prekeyL + timeL
+		for ki, key := range k.Keys {
+			binary.LittleEndian.PutUint32(tmp[prefixL+ki*4:], uint32(key))
+		}
+		start := prefixL + (format.MaxTagsNew * 4)
+		for ki, key := range k.LongKeys {
+			ix := start + ki*8
+			binary.LittleEndian.PutUint64(tmp[ix:], uint64(key))
+		}
+		index++
 	}
 	return append(res, tmp[:]...)
 }
