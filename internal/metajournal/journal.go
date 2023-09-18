@@ -16,6 +16,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -365,6 +366,52 @@ func (ms *Journal) goUpdateMetrics(aggLog AggLog) {
 		log.Printf("Failed to update metrics from sqliteengine, will retry: %v", err)
 		time.Sleep(backoffTimeout)
 	}
+}
+
+func (ms *Journal) Fix(l *MetricMetaLoader) {
+	var all []tlmetadata.Event
+	var version int64
+	for {
+		ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
+		log.Println("start load from version", version)
+		asn, ver, err := l.LoadJournal(ctx, version, true)
+		log.Println("load ", len(asn), " records", "newVersion is", ver)
+		version = ver
+		if err != nil {
+			if strings.Contains(err.Error(), "Query timeout") {
+				break
+			}
+			log.Println("error during to fix", err.Error())
+			return
+		}
+		if len(asn) == 0 {
+			break
+		}
+		all = append(all, asn...)
+	}
+	log.Println("got %d records", len(all))
+	if len(all) != 10572 {
+		log.Println("skip")
+		return
+	}
+	//i := 0
+	//for _, r := range all {
+	//	i++
+	//	if i == 11000 {
+	//		break
+	//	}
+	//	e := tlmetadata.EditEntitynew{
+	//		FieldsMask: 0,
+	//		Event:      r,
+	//	}
+	//	var resp tlmetadata.Event
+	//	err := l.client.EditEntitynew(context.Background(), e, nil, &resp)
+	//	if err != nil {
+	//		log.Println("error during to save fix", err.Error())
+	//		return
+	//	}
+	//}
+
 }
 
 func (ms *Journal) getJournalDiffLocked3(verNumb int64) tlmetadata.GetJournalResponsenew {

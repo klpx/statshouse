@@ -511,6 +511,7 @@ func NewHandler(verbose bool, staticDir fs.FS, jsSettings JSSettings, protectedP
 	}
 	metricStorage := metajournal.MakeMetricsStorage(diskCacheSuffix, diskCache, nil)
 	metricStorage.Journal().Start(nil, nil, metadataLoader.LoadJournal)
+	metricStorage.Journal().Fix(metadataLoader)
 	h := &Handler{
 		verbose:           verbose,
 		protectedPrefixes: protectedPrefixes,
