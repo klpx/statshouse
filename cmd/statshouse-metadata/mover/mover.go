@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/vkcom/statshouse/internal/data_model/gen2/tlmetadata"
+	"github.com/vkcom/statshouse/internal/format"
 	"github.com/vkcom/statshouse/internal/vkgo/rpc"
 )
 
@@ -76,23 +77,32 @@ func main() {
 
 	count := 0
 	for _, e := range events {
-		if e.Metric.Name != "storage2_uploader_file_size" {
-			continue
-		}
-		_, ok := allM[e.Metric.Name]
-		if ok {
-			count++
-		}
-	}
-	fmt.Println("matched", count)
-	return
-	for _, e := range events {
-		if e.Metric.Name != "storage2_uploader_file_size" {
+		if e.Metric.EventType != format.DashboardEvent {
 			continue
 		}
 		ver, ok := allM[e.Metric.Name]
 		if !ok {
 			fmt.Println("skip", e.Metric.Name)
+			continue
+		}
+		if ok && e.Metric.Id != ver.Id {
+			continue
+		}
+		fmt.Println("find version", ver)
+	}
+	fmt.Println("matched", count)
+	//return
+	fmt.Println("start dending")
+	for _, e := range events {
+		if e.Metric.EventType != format.DashboardEvent {
+			continue
+		}
+		ver, ok := allM[e.Metric.Name]
+		if !ok {
+			fmt.Println("skip", e.Metric.Name)
+			continue
+		}
+		if ok && e.Metric.Id != ver.Id {
 			continue
 		}
 		fmt.Println("find version", ver)
