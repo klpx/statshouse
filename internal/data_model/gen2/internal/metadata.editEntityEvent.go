@@ -15,8 +15,8 @@ var _ = basictl.NatWrite
 
 type MetadataEditEntityEvent struct {
 	FieldsMask uint32
-	Metric     MetadataEvent
-	OldVersion int64
+	Metric     MetadataEvent `json:"metric"`
+	OldVersion int64         `json:"old_version"`
 }
 
 func (MetadataEditEntityEvent) TLName() string { return "metadata.editEntityEvent" }

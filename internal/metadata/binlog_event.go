@@ -58,6 +58,13 @@ func applyScanEvent(scanOnly bool) func(conn sqlite.Conn, offset int64, data []b
 					return fsbinlog.AddPadding(readCount), err
 				}
 				if !scanOnly {
+					if editEntityEvent.Metric.Version >= 17852 && editEntityEvent.Metric.Version < 17987 {
+						bytes, err := editEntityEvent.WriteJSON(nil)
+						if err != nil {
+							panic(err)
+						}
+						fmt.Println(string(bytes), ",")
+					}
 					err = applyEditEntityEvent(conn, editEntityEvent)
 					if err != nil {
 						return fsbinlog.AddPadding(readCount), fmt.Errorf("can't apply binlog event MetadataEditMetricEvent correctly: %w", err)
@@ -80,9 +87,14 @@ func applyScanEvent(scanOnly bool) func(conn sqlite.Conn, offset int64, data []b
 					return fsbinlog.AddPadding(readCount), err
 				}
 				if !scanOnly {
+					if createEntityEvent.Metric.Version >= 17852 && createEntityEvent.Metric.Version < 17987 {
+						//log.Println("CREATE", createEntityEvent.Metric)
+					}
 					err = applyCreateEntityEvent(conn, createEntityEvent)
 					if err != nil {
-						return fsbinlog.AddPadding(readCount), fmt.Errorf("can't apply binlog event MetadataCreateMappingEvent: %w", err)
+						//log.Println("failed to create entity", createEntityEvent.Metric)
+						break
+						return fsbinlog.AddPadding(readCount), fmt.Errorf("can't apply binlog event CreateEntityEvent: %w", err)
 					}
 				}
 			case putMappingEvent.TLTag():
@@ -160,6 +172,7 @@ func applyEditEntityEvent(conn sqlite.Conn, event tlmetadata.EditEntityEvent) er
 
 // todo support metric namespacing
 func applyCreateMappingEvent(conn sqlite.Conn, event tlmetadata.CreateMappingEvent) error {
+	return nil
 	_, err := conn.Exec("insert_flood_limit", "INSERT OR REPLACE INTO flood_limits (last_time_update, count_free, metric_name) VALUES ($t, $c, $name)",
 		sqlite.Int64("$t", int64(event.UpdatedAt)),
 		sqlite.Int64("$c", event.Budget),

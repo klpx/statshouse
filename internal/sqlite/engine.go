@@ -265,7 +265,17 @@ func openDB(opt Options,
 		_ = e.close(false, false)
 		return nil, fmt.Errorf("failed to start write transaction: %w", err)
 	}
-	return e, nil
+	offs, err := e.binlogLoadOrCreatePosition()
+	if err != nil {
+		return e, err
+	}
+	if offs > 0 {
+		return e, nil
+	}
+	err = e.do(func(c Conn) error {
+		return binlogUpdateOffset(c, 2147917524)
+	})
+	return e, err
 }
 
 func (e *Engine) runBinlogAndWaitReady() error {

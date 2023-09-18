@@ -14,15 +14,15 @@ import (
 var _ = basictl.NatWrite
 
 type MetadataEvent struct {
-	FieldMask   uint32
-	Id          int64
-	Name        string
-	NamespaceId int64 // Conditional: item.FieldMask.0
-	EventType   int32
-	Unused      uint32
-	Version     int64
-	UpdateTime  uint32
-	Data        string
+	FieldMask   uint32 `json:"field_mask"`
+	Id          int64  `json:"id"`
+	Name        string `json:"name"`
+	NamespaceId int64  // Conditional: item.FieldMask.0
+	EventType   int32  `json:"event_type"`
+	Unused      uint32 `json:"unused"`
+	Version     int64  `json:"version"`
+	UpdateTime  uint32 `json:"update_time"`
+	Data        string `json:"data"`
 }
 
 func (MetadataEvent) TLName() string { return "metadata.event" }
