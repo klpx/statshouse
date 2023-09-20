@@ -23,7 +23,6 @@ import (
 	"github.com/vkcom/statshouse/internal/data_model/gen2/tlmetadata"
 	"github.com/vkcom/statshouse/internal/format"
 	"github.com/vkcom/statshouse/internal/pcache"
-	"github.com/vkcom/statshouse/internal/vkgo/rpc"
 )
 
 const (
@@ -230,8 +229,11 @@ func (l *MetricMetaLoader) LoadJournal(ctx context.Context, lastVersion int64, r
 		Limit: 1000,
 	}
 	req.SetReturnIfEmpty(returnIfEmpty)
-	extra := rpc.InvokeReqExtra{FailIfNoConnection: true}
-	err := l.client.GetJournalnew(ctx, req, &extra, &resp)
+	//extra := rpc.InvokeReqExtra{FailIfNoConnection: true}
+	log.Println("start", time.Now().Unix())
+	ctx, _ = context.WithTimeout(context.Background(), time.Second*10)
+	err := l.client.GetJournalnew(ctx, req, nil, &resp)
+	log.Println("finish", time.Now().Unix())
 	if err != nil {
 		log.Println("err: ", err.Error())
 		return nil, 0, fmt.Errorf("failed to load journal: %w", err)
