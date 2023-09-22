@@ -527,6 +527,46 @@ func mainSimulator() {
 	aggregator.RunSimulator(0, metricStorage, argv.cacheDir, cryptoKey, argv.configAgent)
 }
 
+func mainSaveEntity() {
+	var (
+		metadataNet     string
+		metadataAddr    string
+		metadataActorID uint64
+	)
+	flag.Uint64Var(&metadataActorID, "metadata-actor-id", 0, "")
+	flag.StringVar(&metadataAddr, "metadata-addr", "127.0.0.1:2442", "")
+	flag.StringVar(&metadataNet, "metadata-net", "tcp4", "")
+	flag.Parse()
+	client := tlmetadata.Client{
+		Client:  rpc.NewClient(rpc.ClientWithLogf(log.Printf), rpc.ClientWithTrustedSubnetGroups(build.TrustedSubnetGroups())),
+		Network: metadataNet,
+		Address: metadataAddr,
+		ActorID: metadataActorID,
+	}
+	var from int64 = 0
+	ev := tlmetadata.Event{}
+	for {
+		resp := tlmetadata.GetJournalResponsenew{}
+		err := client.GetJournalnew(context.Background(), tlmetadata.GetJournalnew{
+			From:  from,
+			Limit: 1000,
+		}, nil, &resp)
+		if err != nil {
+			if strings.Contains(err.Error(), "timeout") {
+				break
+			}
+			panic(err)
+		}
+		from = resp.CurrentVersion
+		for _, e := range resp.Events {
+			if e.Name == "Lentach Track Codes" {
+				ev = e
+			}
+		}
+	}
+	fmt.Println(ev)
+}
+
 func mainTagMapping() {
 	// Parse command line tags
 	var (

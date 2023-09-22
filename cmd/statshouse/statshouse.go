@@ -157,6 +157,9 @@ func runMain() int {
 		case "tag_mapping", "-tag_mapping", "--tag_mapping":
 			mainTagMapping()
 			return 0
+		case "debug":
+			mainSaveEntity()
+			return 0
 		default:
 			_, _ = fmt.Fprintf(os.Stderr, "Unknown verb %q:\n", verb)
 			printVerbUsage()
