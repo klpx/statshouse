@@ -144,6 +144,8 @@ const (
 
 	descriptionFieldName = "__description"
 	journalUpdateTimeout = 2 * time.Second
+
+	journalVersion string = "_v2"
 )
 
 type (
@@ -499,7 +501,7 @@ var errTooManyRows = fmt.Errorf("can't fetch more than %v rows", maxSeriesRows)
 
 func NewHandler(verbose bool, staticDir fs.FS, jsSettings JSSettings, protectedPrefixes []string, showInvisible bool, utcOffsetSec int64, approxCacheMaxSize int, chV1 *util.ClickHouse, chV2 *util.ClickHouse, metadataClient *tlmetadata.Client, diskCache *pcache.DiskCache, jwtHelper *vkuth.JWTHelper, location *time.Location, localMode, readOnly, insecureMode bool, querySelectTimeout time.Duration) (*Handler, error) {
 	metadataLoader := metajournal.NewMetricMetaLoader(metadataClient, metajournal.DefaultMetaTimeout)
-	diskCacheSuffix := metadataClient.Address // TODO - use cluster name or something here
+	diskCacheSuffix := metadataClient.Address + journalVersion // TODO - use cluster name or something here
 
 	tmpl, err := template.ParseFS(staticDir, "index.html")
 	if err != nil {
