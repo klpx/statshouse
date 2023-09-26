@@ -218,6 +218,7 @@ func runMain() int {
 		argv.customHostName = srvfunc.HostnameForStatshouse()
 		logOk.Printf("detected statshouse hostname as %q from OS hostname %q\n", argv.customHostName, srvfunc.Hostname())
 	}
+	fmt.Println("parsed host name:", argv.customHostName)
 
 	switch verb {
 	case "agent", "-agent", "--agent":

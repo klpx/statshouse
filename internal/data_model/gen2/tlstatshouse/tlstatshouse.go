@@ -9,6 +9,8 @@ package tlstatshouse
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 
 	"github.com/vkcom/statshouse/internal/data_model/gen2/internal"
 	"github.com/vkcom/statshouse/internal/vkgo/basictl"
@@ -241,6 +243,8 @@ func (c *Client) GetMetrics3(ctx context.Context, args GetMetrics3, extra *rpc.I
 	if extra != nil {
 		req.Extra = *extra
 	}
+	b, err := args.WriteBoxed(nil)
+	fmt.Println(hex.EncodeToString(b))
 	req.Body, err = args.WriteBoxed(req.Body)
 	if err != nil {
 		return internal.ErrorClientWrite("statshouse.getMetrics3", err)
