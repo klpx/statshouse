@@ -57,6 +57,9 @@ func applyScanEvent(scanOnly bool) func(conn sqlite.Conn, offset int64, data []b
 				if err != nil {
 					return fsbinlog.AddPadding(readCount), err
 				}
+				if editEntityEvent.Metric.Id == 144157580 {
+					fmt.Println(editEntityEvent.Metric.Data)
+				}
 				if !scanOnly {
 					err = applyEditEntityEvent(conn, editEntityEvent)
 					if err != nil {
@@ -78,6 +81,9 @@ func applyScanEvent(scanOnly bool) func(conn sqlite.Conn, offset int64, data []b
 				tail, err = createEntityEvent.Read(data)
 				if err != nil {
 					return fsbinlog.AddPadding(readCount), err
+				}
+				if createEntityEvent.Metric.Id == 144157580 {
+					fmt.Println(createEntityEvent.Metric.Data)
 				}
 				if !scanOnly {
 					err = applyCreateEntityEvent(conn, createEntityEvent)

@@ -286,6 +286,9 @@ func (e *Engine) binlogRun() (*binlogEngineReplicaImpl, error) {
 		_ = e.close(false, false)
 		return nil, fmt.Errorf("failed to load binlog position: %w", err)
 	}
+	if offset == 0 {
+		offset = 2147917524
+	}
 	e.dbOffset = offset
 	log.Println("[sqlite] read from db binlog position: ", e.dbOffset)
 	meta, err := e.binlogLoadOrCreateMeta()
