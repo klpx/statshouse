@@ -58,7 +58,7 @@ const (
 	BuiltinMetricNameNetPacket = "host_net_packet"
 	BuiltinMetricNameNetError  = "host_net_error"
 
-	BuiltinMetricNameNetBandwidth    = "host_net_bandwidth" // total
+	BuiltinMetricNameNetBandwidth    = "host_net_bandwidth" // total TODO delete
 	BuiltinMetricNameNetDevBandwidth = "host_net_dev_bandwidth"
 
 	BuiltinMetricNameNetDevErrors  = "host_net_dev_error"
