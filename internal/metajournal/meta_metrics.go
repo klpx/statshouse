@@ -8,9 +8,11 @@ package metajournal
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/vkcom/statshouse/internal/data_model/gen2/tlmetadata"
 	"github.com/vkcom/statshouse/internal/format"
@@ -271,22 +273,28 @@ func (ms *MetricsStorage) ApplyEvent(newEntries []tlmetadata.Event) {
 	// This code operates on immutable structs, it should not change any stored object, except of map
 	promConfigSet := false
 	promConfigData := ""
+	start := time.Now()
 	ms.mu.Lock()
 	for _, e := range newEntries {
 		switch e.EventType {
 		case format.MetricEvent:
+			startMarshall := time.Now()
 			value := &format.MetricMetaValue{}
 			err := json.Unmarshal([]byte(e.Data), value)
 			if err != nil {
 				log.Printf("Cannot marshal metric %s: %v", value.Name, err)
 				continue
 			}
+			fmt.Println("MARSHALL", time.Since(startMarshall).Nanoseconds())
 			value.NamespaceID = int32(e.NamespaceId)
 			value.Version = e.Version
 			value.Name = e.Name
 			value.MetricID = int32(e.Id) // TODO - beware!
 			value.UpdateTime = e.UpdateTime
+			startRestore := time.Now()
 			_ = value.RestoreCachedInfo()
+			fmt.Println("restore", time.Since(startRestore).Nanoseconds())
+			startTail := time.Now()
 			valueOld, ok := ms.metricsByID[value.MetricID]
 			if ok && valueOld.Name != value.Name {
 				delete(ms.metricsByName, valueOld.Name)
@@ -294,6 +302,8 @@ func (ms *MetricsStorage) ApplyEvent(newEntries []tlmetadata.Event) {
 			ms.updateMetric(value)
 			ms.calcGroupForMetricLocked(value)
 			ms.calcNamespaceForMetricLocked(value)
+			fmt.Println("tail", time.Since(startTail).Nanoseconds())
+
 		case format.DashboardEvent:
 			m := map[string]interface{}{}
 			err := json.Unmarshal([]byte(e.Data), &m)
@@ -365,6 +375,7 @@ func (ms *MetricsStorage) ApplyEvent(newEntries []tlmetadata.Event) {
 		}
 	}
 	ms.mu.Unlock()
+	fmt.Println("ALL", time.Since(start).Nanoseconds())
 	if promConfigSet && ms.applyPromConfig != nil { // outside of lock, once
 		ms.applyPromConfig(promConfigData)
 	}
