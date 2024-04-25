@@ -2603,6 +2603,10 @@ func (h *Handler) buildSeriesResponse(s ...seriesResponse) *SeriesResponse {
 					what := promql.DigestWhat(t.Value)
 					switch {
 					case what == promql.DigestAvg && badgeType == format.TagValueIDBadgeAgentSamplingFactor:
+						fmt.Println(*d.Values)
+						fmt.Println("LEN VALUES", len(*d.Values))
+						fmt.Println("LEN TIME", len(s1.Time))
+						fmt.Println("SUM SERIES", sumSeries(d.Values, 1))
 						res.SamplingFactorSrc = sumSeries(d.Values, 1) / float64(len(s1.Time))
 					case what == promql.DigestAvg && badgeType == format.TagValueIDBadgeAggSamplingFactor:
 						res.SamplingFactorAgg = sumSeries(d.Values, 1) / float64(len(s1.Time))
