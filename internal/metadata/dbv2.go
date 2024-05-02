@@ -148,8 +148,8 @@ CREATE TABLE IF NOT EXISTS property
 `
 
 const appId = 0x4d5fa5
-const MaxBudget = 1000
-const GlobalBudget = 1_000_000
+const MaxBudget = 1_000_000_00
+const GlobalBudget = 1_000_000_00
 const StepSec = 3600
 const BudgetBonus = 10
 const bootstrapFieldName = "bootstrap"
