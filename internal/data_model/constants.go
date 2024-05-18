@@ -67,7 +67,7 @@ const (
 
 	AgentMappingTimeout1 = 10 * time.Second
 	AgentMappingTimeout2 = 30 * time.Second
-	AutoConfigTimeout    = 30 * time.Second
+	AutoConfigTimeout    = 10 * time.Second
 
 	MaxJournalItemsSent = 1000 // TODO - increase, but limit response size in bytes
 	MaxJournalBytesSent = 800 * 1024

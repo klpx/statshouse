@@ -23,12 +23,13 @@ import (
 	"pgregory.net/rand"
 )
 
-func GetConfig(network string, rpcClient *rpc.Client, addressesExt []string, hostName string, isEnvStaging bool, componentTag int32, archTag int32, cluster string, dc *pcache.DiskCache, logF func(format string, args ...interface{})) tlstatshouse.GetConfigResult {
+func GetConfig(network string, rpcClient *rpc.Client, addressesExt []string, hostName string, isEnvStaging bool, componentTag int32, archTag int32, cluster string, infinityLoop bool, dc *pcache.DiskCache, logF func(format string, args ...interface{})) (tlstatshouse.GetConfigResult, error) {
 	addresses := append([]string{}, addressesExt...) // For simulator, where many start concurrently with the copy of the config
 	rnd := rand.New()
 	rnd.Shuffle(len(addresses), func(i, j int) { // randomize configuration load
 		addresses[i], addresses[j] = addresses[j], addresses[i]
 	})
+	start := time.Now()
 	backoffTimeout := time.Duration(0)
 	for nextAddr := 0; ; nextAddr = (nextAddr + 1) % len(addresses) {
 		addr := addresses[nextAddr]
@@ -42,9 +43,10 @@ func GetConfig(network string, rpcClient *rpc.Client, addressesExt []string, hos
 			if err = clientSaveConfigToCache(cluster, dc, dst); err != nil {
 				logF("Configuration: failed to save autoconfig to disk cache: %v", err)
 			}
-			return dst
+			return dst, nil
 		}
 		logF("Configuration: failed autoconfiguration from address (%q) - %v", addr, err)
+		addressesStr := strings.Join(addresses, ",")
 		if nextAddr == len(addresses)-1 { // last one
 			dst, err = clientGetConfigFromCache(cluster, dc)
 			if err == nil {
@@ -53,11 +55,14 @@ func GetConfig(network string, rpcClient *rpc.Client, addressesExt []string, hos
 				// can be easily tracked in __auto_config metric
 				logF("Configuration: failed autoconfiguration from all addresses (%q), loaded previous autoconfiguration from disk cache, address list is (%q), max is %d",
 					strings.Join(addresses, ","), strings.Join(dst.Addresses, ","), dst.MaxAddressesCount)
-				return dst
+				return dst, nil
 			}
 			backoffTimeout = data_model.NextBackoffDuration(backoffTimeout)
 			logF("Configuration: failed autoconfiguration from all addresses (%q), will retry after %v delay",
-				strings.Join(addresses, ","), backoffTimeout)
+				addressesStr, backoffTimeout)
+			if !infinityLoop && time.Since(start) >= data_model.AutoConfigTimeout {
+				return tlstatshouse.GetConfigResult{}, fmt.Errorf("configuration: failed autoconfiguration from all addresses (%q)", addressesStr)
+			}
 			time.Sleep(backoffTimeout)
 		}
 	}

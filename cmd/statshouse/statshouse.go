@@ -272,6 +272,7 @@ func mainAgent(aesPwd string, dc *pcache.DiskCache) int {
 		argv.configAgent,
 		argv.customHostName,
 		format.TagValueIDComponentAgent,
+		false,
 		metricStorage,
 		dc,
 		log.Printf,
@@ -519,7 +520,7 @@ func mainIngressProxy(aesPwd string) int {
 
 	// We use agent instance for ingress proxy built-in metrics
 	sh2, err := agent.MakeAgent("tcp", argv.cacheDir, aesPwd, argv.configAgent, argv.customHostName,
-		format.TagValueIDComponentIngressProxy, nil, nil, log.Printf, nil, nil)
+		format.TagValueIDComponentIngressProxy, true, nil, nil, log.Printf, nil, nil)
 	if err != nil {
 		logErr.Printf("error creating Agent instance: %v", err)
 		return 1

@@ -82,7 +82,8 @@ type Agent struct {
 }
 
 // All shard aggregators must be on the same network
-func MakeAgent(network string, storageDir string, aesPwd string, config Config, hostName string, componentTag int32, metricStorage format.MetaStorageInterface, dc *pcache.DiskCache, logF func(format string, args ...interface{}),
+// infinityAutoConfigurationLoop - agent should be exited after fail autoconfiguration, but aggregator/proxy shu
+func MakeAgent(network string, storageDir string, aesPwd string, config Config, hostName string, componentTag int32, infinityAutoConfigurationLoop bool, metricStorage format.MetaStorageInterface, dc *pcache.DiskCache, logF func(format string, args ...interface{}),
 	beforeFlushBucketFunc func(s *Agent, now time.Time), getConfigResult *tlstatshouse.GetConfigResult) (*Agent, error) {
 	rpcClient := rpc.NewClient(rpc.ClientWithCryptoKey(aesPwd), rpc.ClientWithTrustedSubnetGroups(build.TrustedSubnetGroups()), rpc.ClientWithLogf(logF))
 	rnd := rand.New()
@@ -124,7 +125,11 @@ func MakeAgent(network string, storageDir string, aesPwd string, config Config, 
 		if len(config.AggregatorAddresses) < 3 {
 			return nil, fmt.Errorf("configuration Error: must have 3 aggregator addresses for configuration redundancy")
 		}
-		result.GetConfigResult = GetConfig(network, rpcClient, config.AggregatorAddresses, hostName, result.isEnvStaging, result.componentTag, result.buildArchTag, config.Cluster, dc, logF)
+		var err error
+		result.GetConfigResult, err = GetConfig(network, rpcClient, config.AggregatorAddresses, hostName, result.isEnvStaging, result.componentTag, result.buildArchTag, config.Cluster, infinityAutoConfigurationLoop, dc, logF)
+		if err != nil {
+			return nil, err
+		}
 	}
 	config.AggregatorAddresses = result.GetConfigResult.Addresses[:result.GetConfigResult.MaxAddressesCount] // agents simply ignore excess addresses
 	nowUnix := uint32(time.Now().Unix())
