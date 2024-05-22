@@ -433,6 +433,8 @@ func mainAgent(aesPwd string, dc *pcache.DiskCache) int {
 					http.DefaultServeMux.ServeHTTP(w, r)
 				} else {
 					w.WriteHeader(http.StatusUnauthorized)
+					w.Write([]byte(fmt.Sprintf("Listen address: %s\n", argv.listenAddr)))
+					w.Write([]byte(fmt.Sprintf("Remote address: %s\n", r.RemoteAddr)))
 				}
 			})
 			logOk.Printf("Start listening pprof HTTP %q", argv.listenAddr)
