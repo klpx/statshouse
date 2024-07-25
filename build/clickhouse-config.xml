@@ -3,7 +3,43 @@
         <test_shard_aggregator>
             <shard>
                 <replica>
-                    <host>aggregator</host>
+                    <host>aggregator-0-0</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>aggregator-0-1</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>aggregator-0-2</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+            <shard>
+                <replica>
+                    <host>aggregator-1-0</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>aggregator-1-1</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>aggregator-1-2</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+            <shard>
+                <replica>
+                    <host>aggregator-2-0</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>aggregator-2-1</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>aggregator-2-2</host>
                     <port>9000</port>
                 </replica>
             </shard>
