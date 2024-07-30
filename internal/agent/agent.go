@@ -494,15 +494,25 @@ func (s *Agent) shardNumFromHash(hash uint64) int {
 	return int(mul)
 }
 
-func (s *Agent) shardFromHash(hash uint64) *Shard {
+func (s *Agent) shardFromKey(key data_model.Key) *Shard {
+	if s.shardByMetric.Load() {
+		metricId := int(key.Metric)
+		if key.Metric == format.BuiltinMetricIDBadges {
+			// __badges is a special case because it's created by us, extremely heavy, and always requested with metric
+			// we shard it same way as metric it's used for
+			metricId = int(key.Keys[2])
+		}
+		shardNum := metricId % len(s.Shards)
+		return s.Shards[shardNum]
+	}
+	hash := key.Hash()
 	return s.Shards[s.shardNumFromHash(hash)]
 }
 
 // Do not create too many. ShardReplicas will iterate through values before flushing bucket
 // Useful for watermark metrics.
 func (s *Agent) CreateBuiltInItemValue(key data_model.Key) *BuiltInItemValue {
-	keyHash := key.Hash()
-	shardReplica := s.shardFromHash(keyHash)
+	shardReplica := s.shardFromKey(key)
 	return shardReplica.CreateBuiltInItemValue(key)
 }
 
@@ -567,32 +577,6 @@ func (s *Agent) ApplyMetric(m tlstatshouse.MetricBytes, h data_model.MappedMetri
 	// using single metric as a "namespace" for "sub-metrics" of different kinds.
 	// The only thing we check is if percentiles are allowed. This is configured per metric.
 
-	keyHash := h.Key.Hash()
-	if s.shardByMetric.Load() {
-		metricId := int(h.Key.Metric)
-		if h.Key.Metric == format.BuiltinMetricIDBadges {
-			// __badges is a special case because it's created by us, extremely heavy, and always requested with metric
-			// we shard it same way as metric it's used for
-			metricId = int(h.Key.Keys[2])
-		}
-		shardNum := metricId % len(s.Shards)
-		if shardNum < 0 {
-			shardNum += len(s.Shards)
-		}
-		shard := s.Shards[shardNum]
-		if len(m.Unique) != 0 {
-			shard.ApplyUnique(h.Key, keyHash, h.SValue, m.Unique, m.Counter, h.HostTag, h.MetricInfo)
-			return
-		}
-		if len(m.Value) != 0 {
-			shard.ApplyValues(h.Key, keyHash, h.SValue, m.Value, m.Counter, h.HostTag, h.MetricInfo)
-			return
-		}
-		if m.Counter > 0 {
-			shard.ApplyCounter(h.Key, keyHash, h.SValue, m.Counter, h.HostTag, h.MetricInfo)
-		}
-		return
-	}
 	// here m.Unique and m.Value cannot be both non-empty
 	// also m.Counter is >= 0
 	//
@@ -608,12 +592,13 @@ func (s *Agent) ApplyMetric(m tlstatshouse.MetricBytes, h data_model.MappedMetri
 	// so if counter is 20, and Uniques len is 3, we simply add each of 3 events to HLL
 	// with a twist, that we also store min/max/sum/sumsquare of unique values converted to float64
 	// for the purpose of this, Uniques are treated exactly as Values
-	shardNum := s.shardNumFromHash(keyHash)
-	shard := s.Shards[shardNum]
 	// m.Counter is >= 0 here, otherwise IngestionStatus is not OK, and we returned above
+	shard := s.shardFromKey(h.Key)
 	if len(m.Unique) != 0 {
+		// if we shard by metric all values of a given metric will go to the same shard anyway,
+		// so there is no need for special sharding for unique values
 		numShards := s.NumShards()
-		if h.MetricInfo != nil && h.MetricInfo.ShardUniqueValues && numShards > 1 {
+		if h.MetricInfo != nil && h.MetricInfo.ShardUniqueValues && numShards > 1 && !s.shardByMetric.Load() {
 			// we want unique value sets to have no intersections
 			// so we first shard by unique value, then shard among 3 replicas by keys
 			skipShards := int(s.skipShards.Load())
@@ -665,7 +650,7 @@ func (s *Agent) AddCounterHost(key data_model.Key, count float64, hostTag int32,
 		return
 	}
 	keyHash := key.Hash()
-	shardReplica := s.shardFromHash(keyHash)
+	shardReplica := s.shardFromKey(key)
 	shardReplica.AddCounterHost(key, keyHash, count, hostTag, metricInfo)
 }
 
@@ -676,7 +661,7 @@ func (s *Agent) AddCounterHostStringBytes(key data_model.Key, str []byte, count 
 		return
 	}
 	keyHash := key.Hash()
-	shardReplica := s.shardFromHash(keyHash)
+	shardReplica := s.shardFromKey(key)
 	shardReplica.AddCounterHostStringBytes(key, keyHash, str, count, hostTag, metricInfo)
 }
 
@@ -685,7 +670,7 @@ func (s *Agent) AddValueCounterHost(key data_model.Key, value float64, counter f
 		return
 	}
 	keyHash := key.Hash()
-	shardReplica := s.shardFromHash(keyHash)
+	shardReplica := s.shardFromKey(key)
 	shardReplica.AddValueCounterHost(key, keyHash, value, counter, hostTag, nil)
 }
 
@@ -695,7 +680,7 @@ func (s *Agent) AddValueCounter(key data_model.Key, value float64, counter float
 		return
 	}
 	keyHash := key.Hash()
-	shardReplica := s.shardFromHash(keyHash)
+	shardReplica := s.shardFromKey(key)
 	shardReplica.AddValueCounterHost(key, keyHash, value, counter, 0, metricInfo)
 }
 
@@ -705,7 +690,7 @@ func (s *Agent) AddValueCounterHostArray(key data_model.Key, values []float64, m
 		return
 	}
 	keyHash := key.Hash()
-	shard := s.shardFromHash(keyHash)
+	shard := s.shardFromKey(key)
 	shard.AddValueArrayCounterHost(key, keyHash, values, mult, hostTag, metricInfo)
 }
 */
@@ -715,7 +700,7 @@ func (s *Agent) AddValueArrayCounterHostStringBytes(key data_model.Key, values [
 		return
 	}
 	keyHash := key.Hash()
-	shardReplica := s.shardFromHash(keyHash)
+	shardReplica := s.shardFromKey(key)
 	shardReplica.AddValueArrayCounterHostStringBytes(key, keyHash, values, mult, hostTag, str, metricInfo)
 }
 
@@ -724,7 +709,7 @@ func (s *Agent) AddValueCounterHostStringBytes(key data_model.Key, value float64
 		return
 	}
 	keyHash := key.Hash()
-	shardReplica := s.shardFromHash(keyHash)
+	shardReplica := s.shardFromKey(key)
 	shardReplica.AddValueCounterHostStringBytes(key, keyHash, value, counter, hostTag, str, nil)
 }
 
@@ -733,7 +718,7 @@ func (s *Agent) MergeItemValue(key data_model.Key, item *data_model.ItemValue, m
 		return
 	}
 	keyHash := key.Hash()
-	shardReplica := s.shardFromHash(keyHash)
+	shardReplica := s.shardFromKey(key)
 	shardReplica.MergeItemValue(key, keyHash, item, metricInfo)
 }
 
@@ -742,7 +727,7 @@ func (s *Agent) AddUniqueHostStringBytes(key data_model.Key, hostTag int32, str 
 		return
 	}
 	keyHash := key.Hash()
-	shardReplica := s.shardFromHash(keyHash)
+	shardReplica := s.shardFromKey(key)
 	shardReplica.AddUniqueHostStringBytes(key, hostTag, str, keyHash, hashes, count, metricInfo)
 }
 
