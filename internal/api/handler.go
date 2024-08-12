@@ -1738,7 +1738,7 @@ type selectRow struct {
 
 type tagValuesSelectCols struct {
 	meta  tagValuesQueryMeta
-	valID proto.ColInt64
+	valID proto.ColUInt64
 	val   proto.ColStr
 	cnt   proto.ColFloat64
 	res   proto.Results
