@@ -993,6 +993,39 @@ func (h *Handler) resolveFilter(metricMeta *format.MetricMetaValue, version stri
 	return m, nil
 }
 
+func (h *Handler) resolveFilter2(metricMeta *format.MetricMetaValue, version string, rawFilter map[string][]string) (map[string][]uint64, map[string][]string, error) {
+	mappedFilter := map[string][]uint64{}
+	stringFilter := map[string][]string{}
+	for tagId, values := range rawFilter {
+		if version == Version1 && tagId == format.EnvTagID {
+			continue // we only support production tables for v1
+		}
+		if tagId == format.StringTopTagID {
+			for _, val := range values {
+				stringFilter[tagId] = append(stringFilter[tagId], unspecifiedToEmpty(val))
+			}
+			continue
+		}
+		ids, err := h.getRichTagValueIDs(metricMeta, version, tagId, values)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, id := range ids {
+			mappedFilter[tagId] = append(mappedFilter[tagId], uint64(id))
+		}
+		// should always be present because we checked it in getRichTagValueIDs
+		tag, ok := metricMeta.Name2Tag[tagId]
+		if !ok {
+			return nil, nil, fmt.Errorf("tag with name %s not found for metric %s", tagId, metricMeta.Name)
+		}
+		if !tag.Raw && !tag.IsMetric && !tag.IsGroup && !tag.IsNamespace {
+			stringFilter[tagId] = append(stringFilter[tagId], values...)
+		}
+
+	}
+	return mappedFilter, stringFilter, nil
+}
+
 func (h *Handler) HandleStatic(w http.ResponseWriter, r *http.Request) {
 	origPath := r.URL.Path
 	switch r.URL.Path {
@@ -1800,15 +1833,15 @@ func (h *Handler) handleGetMetricTagValues(ctx context.Context, req getMetricTag
 		return nil, false, err
 	}
 
-	filterIn, filterNotIn, err := parseQueryFilter(req.filter)
+	rawFilterIn, rawFilterNotIn, err := parseQueryFilter(req.filter)
 	if err != nil {
 		return nil, false, err
 	}
-	mappedFilterIn, err := h.resolveFilter(metricMeta, version, filterIn)
+	mappedFilterIn, stringFilterIn, err := h.resolveFilter2(metricMeta, version, rawFilterIn)
 	if err != nil {
 		return nil, false, err
 	}
-	mappedFilterNotIn, err := h.resolveFilter(metricMeta, version, filterNotIn)
+	mappedFilterNotIn, stringFilterNotIn, err := h.resolveFilter2(metricMeta, version, rawFilterNotIn)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1828,13 +1861,15 @@ func (h *Handler) handleGetMetricTagValues(ctx context.Context, req getMetricTag
 	}
 
 	pq := &preparedTagValuesQuery{
-		version:     version,
-		metricID:    metricMeta.MetricID,
-		preKeyTagID: metricMeta.PreKeyTagID,
-		tagID:       tagID,
-		numResults:  numResults,
-		filterIn:    mappedFilterIn,
-		filterNotIn: mappedFilterNotIn,
+		version:         version,
+		metricID:        metricMeta.MetricID,
+		preKeyTagID:     metricMeta.PreKeyTagID,
+		tagID:           tagID,
+		numResults:      numResults,
+		filterUIntIn:    mappedFilterIn,
+		filterUIntNotIn: mappedFilterNotIn,
+		filterStrIn:     stringFilterIn,
+		filterStrNotIn:  stringFilterNotIn,
 	}
 
 	tagInfo := map[selectRow]float64{}

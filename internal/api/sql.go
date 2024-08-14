@@ -17,11 +17,16 @@ import (
 )
 
 type preparedTagValuesQuery struct {
-	version     string
-	metricID    int32
-	preKeyTagID string
-	tagID       string
-	numResults  int
+	version         string
+	metricID        int32
+	preKeyTagID     string
+	tagID           string
+	numResults      int
+	filterUIntIn    map[string][]uint64
+	filterUIntNotIn map[string][]uint64
+	filterStrIn     map[string][]string
+	filterStrNotIn  map[string][]string
+	// legacy
 	filterIn    map[string][]interface{}
 	filterNotIn map[string][]interface{}
 }
@@ -54,6 +59,34 @@ func (pq *preparedPointsQuery) isLight() bool {
 	return pq.kind != data_model.DigestKindUnique && pq.kind != data_model.DigestKindPercentiles
 }
 
+func appendInFilter[V uint64 | string | interface{}](query string, args []interface{}, filter map[string][]V, str bool) (string, []interface{}) {
+	for k, ids := range filter {
+		if len(ids) > 0 {
+			query += fmt.Sprintf("\nAND %s IN (%s)", columnName2(false, k, "", str), expandBindVars(len(ids)))
+			for _, id := range ids {
+				args = append(args, interface{}(id))
+			}
+		} else {
+			query += "\nAND 1=0"
+		}
+	}
+	return query, args
+}
+
+func appendNotInFilter[V uint64 | string | interface{}](query string, args []interface{}, filter map[string][]V, str bool) (string, []interface{}) {
+	for k, ids := range filter {
+		if len(ids) > 0 {
+			query += fmt.Sprintf("\nAND %s NOT IN (%s)", columnName2(false, k, "", str), expandBindVars(len(ids)))
+			for _, id := range ids {
+				args = append(args, interface{}(id))
+			}
+		} else {
+			query += "\nAND 1=1"
+		}
+	}
+	return query, args
+}
+
 func tagValuesQuery(pq *preparedTagValuesQuery, lod data_model.LOD) (string, tagValuesQueryMeta, error) {
 	meta := tagValuesQueryMeta{}
 	valueName := "_value"
@@ -82,26 +115,12 @@ WHERE
 	if pq.version == Version1 {
 		args = append(args, lod.FromSec, lod.ToSec)
 	}
-	for k, ids := range pq.filterIn {
-		if len(ids) > 0 {
-			query += fmt.Sprintf(`
-  AND %s IN (%s)`, columnName(lod.HasPreKey, k, pq.preKeyTagID), expandBindVars(len(ids)))
-			args = append(args, ids...)
-		} else {
-			query += `
-  AND 1=0`
-		}
-	}
-	for k, ids := range pq.filterNotIn {
-		if len(ids) > 0 {
-			query += fmt.Sprintf(`
-  AND %s NOT IN (%s)`, columnName(lod.HasPreKey, k, pq.preKeyTagID), expandBindVars(len(ids)))
-			args = append(args, ids...)
-		} else {
-			query += `
-  AND 1=1`
-		}
-	}
+	query, args = appendInFilter(query, args, pq.filterIn, false)
+	query, args = appendNotInFilter(query, args, pq.filterNotIn, false)
+	query, args = appendInFilter(query, args, pq.filterUIntIn, false)
+	query, args = appendNotInFilter(query, args, pq.filterUIntNotIn, false)
+	query, args = appendInFilter(query, args, pq.filterStrIn, true)
+	query, args = appendNotInFilter(query, args, pq.filterStrNotIn, true)
 	query += fmt.Sprintf(`
 GROUP BY
   %s
@@ -481,6 +500,27 @@ func columnName(hasPreKey bool, tagID string, preKeyTagID string) string {
 	default:
 		if hasPreKey && tagID == preKeyTagID {
 			return "prekey"
+		}
+		// 'tagID' assumed to be a number from 0 to 15,
+		// dont't verify (ClickHouse just won't find a column)
+		return "key" + tagID
+	}
+}
+
+func columnName2(hasPreKey bool, tagID string, preKeyTagID string, string bool) string {
+	// intentionally not using constants from 'format' package,
+	// because it is a table column name, not an external contract
+	switch tagID {
+	case format.StringTopTagID:
+		return "skey"
+	case format.ShardTagID:
+		return "_shard_num"
+	default:
+		if hasPreKey && tagID == preKeyTagID {
+			return "prekey"
+		}
+		if string {
+			return "skey" + tagID
 		}
 		// 'tagID' assumed to be a number from 0 to 15,
 		// dont't verify (ClickHouse just won't find a column)
