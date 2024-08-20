@@ -89,23 +89,25 @@ func appendNotInFilter[V uint64 | string | interface{}](query string, args []int
 
 func tagValuesQuery(pq *preparedTagValuesQuery, lod data_model.LOD) (string, tagValuesQueryMeta, error) {
 	meta := tagValuesQueryMeta{}
-	valueName := "_value"
-	if pq.stringTag() {
-		meta.stringValue = true
-		valueName = "_string_value"
-	}
+	// FIXME: string tags are currently broken
+	// if pq.stringTag() {
+	// 	meta.stringValue = true
+	// 	valueName = "_string_value"
+	// }
+	mappedColumn := columnName2(false, pq.tagID, "", false)
+	stringColumn := columnName2(false, pq.tagID, "", true)
 
 	// no need to escape anything as long as table and tag names are fixed
 	query := fmt.Sprintf(`
 SELECT
-  %s AS %s, toFloat64(%s(count)) AS _count
+  %s AS _value, %s AS _string_value, toFloat64(%s(count)) AS _count
 FROM
   %s
 WHERE
   %s = ?
   AND time >= ? AND time < ?%s`,
-		columnName(lod.HasPreKey, pq.tagID, pq.preKeyTagID),
-		valueName,
+		mappedColumn,
+		stringColumn,
 		sqlAggFn(pq.version, "sum"),
 		pq.preKeyTableName(lod),
 		metricColumn(pq.version),
@@ -122,16 +124,15 @@ WHERE
 	query, args = appendInFilter(query, args, pq.filterStrIn, true)
 	query, args = appendNotInFilter(query, args, pq.filterStrNotIn, true)
 	query += fmt.Sprintf(`
-GROUP BY
-  %s
+GROUP BY _value, _string_value
 HAVING _count > 0
 ORDER BY
   _count DESC,
-  %s
+  _value, _string_value
 LIMIT %v
 SETTINGS
   optimize_aggregation_in_order = 1
-`, columnName(lod.HasPreKey, pq.tagID, pq.preKeyTagID), valueName, pq.numResults+1) // +1 so we can set "more":true
+`, pq.numResults+1) // +1 so we can set "more":true
 
 	q, err := util.BindQuery(query, args...)
 	return q, meta, err

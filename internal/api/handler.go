@@ -1784,6 +1784,7 @@ func newTagValuesSelectCols(meta tagValuesQueryMeta) *tagValuesSelectCols {
 		c.res = append(c.res, proto.ResultColumn{Name: "_string_value", Data: &c.val})
 	} else {
 		c.res = append(c.res, proto.ResultColumn{Name: "_value", Data: &c.valID})
+		c.res = append(c.res, proto.ResultColumn{Name: "_string_value", Data: &c.val})
 	}
 	c.res = append(c.res, proto.ResultColumn{Name: "_count", Data: &c.cnt})
 	return c
@@ -1796,6 +1797,8 @@ func (c *tagValuesSelectCols) rowAt(i int) selectRow {
 		row.val = string(c.val.Buf[pos.Start:pos.End])
 	} else {
 		row.valID = int32(c.valID[i])
+		pos := c.val.Pos[i]
+		row.val = string(c.val.Buf[pos.Start:pos.End])
 	}
 	return row
 }
@@ -1923,7 +1926,7 @@ func (h *Handler) handleGetMetricTagValues(ctx context.Context, req getMetricTag
 		v := d.val
 		if pq.stringTag() {
 			v = emptyToUnspecified(v)
-		} else {
+		} else if v == "" {
 			v = h.getRichTagValue(metricMeta, version, tagID, d.valID)
 		}
 		ret.TagValues = append(ret.TagValues, MetricTagValueInfo{
