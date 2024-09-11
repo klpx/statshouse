@@ -90,7 +90,7 @@ export const GET_PARAMS = {
 export type GetParams = Enum<typeof GET_PARAMS>;
 
 export const METRIC_VALUE_BACKEND_VERSION = {
-  v1: '1',
+  v1: '3',
   v2: '2',
 } as const;
 export type MetricValueBackendVersion = Enum<typeof METRIC_VALUE_BACKEND_VERSION>;
