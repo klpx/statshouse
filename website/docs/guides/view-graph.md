@@ -2,7 +2,7 @@
 sidebar_position: 4
 ---
 
-import Ui from '../img/ui.png'
+import HomeLabeled6AB from '../img/home-labeled-6ab.png'
 import TableView from '../img/table-view.png'
 import HostMetrics from '../img/host-metrics.png'
 import ServiceMetrics from '../img/service-metrics.png'
@@ -40,9 +40,8 @@ import Prom from '../img/prom.png'
 import PromQuery from '../img/prom-query.png'
 import MetricTabs from '../img/metric-tabs.png'
 import MetricTabDelete from '../img/metric-tab-delete.png'
-import DeltaResAggr from '../img/delta-res-aggr.png'
-import ResYellow from '../img/res-yellow.png'
-import ResRed from '../img/res-red.png'
+import Delta from '../img/delta.png'
+import Resolution from '../img/resolution.png'
 
 # View metric data
 
@@ -52,7 +51,7 @@ StatsHouse does not support viewing data via third-party applications.
 
 To learn more about viewing options, refer to the picture below and the navigation bar.
 
-<img src={Ui} width="1000"/>
+<img src={HomeLabeled6AB} width="1000"/>
 
 ## 1 — Metric name
 
@@ -220,18 +219,16 @@ even when you view data using the minimal available aggregation interval:
 
 ### 6a — "Delta"
 
-:::info
-The functionality described below will be redesigned.
-:::
-
-The Δ ("delta") value indicates the aggregation interval (resolution) corresponding to the interval
+The Δ ("delta") value indicates the aggregation interval (resolution) corresponding to the interval 
 between the neighboring points on a plot.
 
-1. When you choose a specific aggregation interval (not the _Auto_ or _Auto (low)_, but _1 second_, _5 minutes_, _1
+**How many points should be plotted? → How many of them will fit on the graph? → Δ (‘delta’)**
+
+1. When you choose a specific aggregation interval (not the _Auto_ or _Auto (low)_, but _1 second_, _5 minutes_, _1 
    hour_, etc.), the "delta" shows the resulting aggregation to be displayed on a graph.
 
    What does it depend on?
-
+   
     * On the **[initial resolution](#6b--resolution)** you use for sending data for your metric.
       The default one is to send data once per second, but you can send it once per 5 seconds, for example.
     * On the **[minimal available aggregation interval](../overview/concepts.md#minimal-available-aggregation-interval)**.
@@ -247,10 +244,10 @@ between the neighboring points on a plot.
    allow you to display as many points as you need. So the data is displayed at a lower resolution.
 
 For the _Auto_ or _Auto (low)_ aggregation interval, we recommend using the _count/sec_ and _sum/sec_ statistics.
-If you still do use the _count_ and _sum_ ones, pay attention to the "delta". In this case, the statistic shows
+If you still do use the _count_ and _sum_ ones, pay attention to the "delta". In this case, the statistic shows 
 the number of events for the time interval (which is the "delta" value), and can vary as well.
 
-:::tip
+:::info
 #### How it works in practice
 
 Suppose StatsHouse has detailed data for a metric:
@@ -261,22 +258,19 @@ Suppose StatsHouse has detailed data for a metric:
 But:
 * you requested data for a large time period (a week).
 
-StatsHouse will display the data at _NOT the 5-second_ resolution (as you wanted), but at the _300-second_
+StatsHouse will display the data at _NOT the 5-second_ resolution (as you wanted), but at the _300-second_ 
 resolution: data with this aggregation interval (Δ300s) fits on the graph.
 
-<img src={DeltaResAggr} width="1000"/>
+<img src={Delta} width="1000"/>
+
 :::
 
 ### 6b — Resolution
 
 If the owner has [set a custom resolution](edit-metrics.md#resolution) for a metric,
-it is displayed above the graph as the yellow badge.
+it is displayed above the graph.
 
-<img src={ResYellow} width="800"/>
-
-If the custom resolution value is greater than the selected aggregation interval, the badge turns red.
-
-<img src={ResRed} width="1000"/>
+<img src={Resolution} width="800"/>
 
 ## 7 — Tags
 
