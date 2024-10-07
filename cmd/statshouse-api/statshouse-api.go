@@ -323,7 +323,7 @@ func run(argv args, cfg *api.Config, vkuthPublicKeys map[string][]byte) error {
 		DefaultMetricFilterNotIn: defaultMetricFilterNotIn,
 		EventPreset:              argv.eventPreset,
 		DefaultNumSeries:         argv.defaultNumSeries,
-		DisableV1:                len(argv.chV1Addrs) == 0,
+		DisableV1:                false,
 		AdminDash:                argv.adminDash,
 	}
 	if argv.LocalMode {
