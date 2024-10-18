@@ -155,9 +155,15 @@ func appendKeys(res []byte, k data_model.Key, metricCache *metricIndexCache, use
 
 func appendKeysNewFormat(res []byte, k data_model.Key, metricCache *metricIndexCache, usedTimestamps map[uint32]struct{}, stringTagProb float64, rnd *rand.Rand, stag string) []byte {
 	appendTag := func(res []byte, v uint32) []byte {
-		if v > 0 && stringTagProb > 0 && stringTagProb > rnd.Float64() {
+
+		if k.Metric > 0 && (v == 40 && 0.5 > rnd.Float64() || v == 41) {
 			res = binary.LittleEndian.AppendUint32(res, 0)
-			res = rowbinary.AppendString(res, fmt.Sprintf("long_and_fake_tagvalue_%d", v))
+			switch v {
+			case 40:
+				res = rowbinary.AppendString(res, "mapped0")
+			case 41:
+				res = rowbinary.AppendString(res, "not_mapped")
+			}
 		} else {
 			res = binary.LittleEndian.AppendUint32(res, v)
 			res = rowbinary.AppendString(res, "")
