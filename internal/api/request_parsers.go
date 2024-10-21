@@ -327,6 +327,7 @@ func parseHTTPRequestS(r *http.Request, maxTabs int, location *time.Location, ge
 		if t == nil {
 			continue
 		}
+		t.avoidCache = true
 		switch k {
 		case paramTabNumber:
 			tabX, err = parseTabX(first(v))
@@ -351,8 +352,8 @@ func parseHTTPRequestS(r *http.Request, maxTabs int, location *time.Location, ge
 			}
 		case ParamQueryFilter:
 			t.filterIn, t.filterNotIn, err = parseQueryFilter(v)
-		case ParamQueryVerbose:
-			t.verbose = first(v) == "1"
+		// case ParamQueryVerbose:
+		// 	t.verbose = first(v) == "1"
 		case ParamQueryWhat:
 			for _, what := range v {
 				if fn, _ := ParseQueryFunc(what, &t.maxHost); fn.What != data_model.DigestUnspecified {
