@@ -1870,6 +1870,7 @@ func (h *Handler) handleGetMetricTagValues(ctx context.Context, req getMetricTag
 
 	lods, err := data_model.GetLODs(data_model.GetTimescaleArgs{
 		Version:     req.version,
+		V3AfterTs:   h.v3AfterTs,
 		Start:       from.Unix(),
 		End:         to.Unix(),
 		ScreenWidth: 100, // really dumb
@@ -2334,8 +2335,12 @@ func (h *Handler) handleGetTable(ctx context.Context, ai accessInfo, debugQuerie
 	if err != nil {
 		return nil, false, err
 	}
+	version := req.version
+	if h.v3AfterTs > 0 && req.version == Version2 && req.from.Unix() > h.v3AfterTs {
+		version = Version3
+	}
 	lods, err := data_model.GetLODs(data_model.GetTimescaleArgs{
-		Version:     req.version,
+		Version:     version,
 		Start:       req.from.Unix(),
 		End:         req.to.Unix(),
 		Step:        req.step,
@@ -3051,6 +3056,7 @@ func (h *Handler) loadPoints(ctx context.Context, pq *preparedPointsQuery, lod d
 }
 
 func (h *Handler) loadPoint(ctx context.Context, pq *preparedPointsQuery, lod data_model.LOD) ([]pSelectRow, error) {
+	// TODO: support v3 query here
 	query, args, err := loadPointQuery(pq, lod, h.utcOffset)
 	if err != nil {
 		return nil, err

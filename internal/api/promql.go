@@ -446,6 +446,9 @@ func (h *Handler) QuerySeries(ctx context.Context, qry *promql.SeriesQuery) (pro
 		}
 	}
 	version := data_model.VersionOrDefault(qry.Options.Version)
+	if h.v3AfterTs > 0 && qry.Timescale.Time[0]-qry.Offset > h.v3AfterTs {
+		version = Version3
+	}
 	var lods []data_model.LOD
 	if qry.Options.Mode == data_model.PointQuery {
 		lod0 := qry.Timescale.LODs[0]
