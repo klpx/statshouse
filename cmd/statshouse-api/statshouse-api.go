@@ -354,34 +354,34 @@ func run(argv args, cfg *api.Config, vkuthPublicKeys map[string][]byte) error {
 
 	m := mux.NewRouter()
 	a := m.PathPrefix(api.RoutePrefix).Subrouter()
-	a.Path("/"+api.EndpointLegacyRedirect).Methods("GET", "HEAD", "POST").HandlerFunc(f.HandleLegacyRedirect)
-	a.Path("/" + api.EndpointMetricList).Methods("GET").HandlerFunc(f.HandleGetMetricsList)
-	a.Path("/" + api.EndpointMetricTagValues).Methods("GET").HandlerFunc(f.HandleGetMetricTagValues)
-	a.Path("/" + api.EndpointMetric).Methods("GET").HandlerFunc(f.HandleGetMetric)
-	a.Path("/" + api.EndpointMetric).Methods("POST").HandlerFunc(f.HandlePostMetric)
-	a.Path("/" + api.EndpointResetFlood).Methods("POST").HandlerFunc(f.HandlePostResetFlood)
-	a.Path("/" + api.EndpointQuery).Methods("GET").HandlerFunc(f.HandleSeriesQuery)
-	a.Path("/" + api.EndpointPoint).Methods("GET").HandlerFunc(f.HandlePointQuery)
-	a.Path("/" + api.EndpointPoint).Methods("POST").HandlerFunc(f.HandlePointQuery)
-	a.Path("/" + api.EndpointTable).Methods("GET").HandlerFunc(f.HandleGetTable)
-	a.Path("/" + api.EndpointQuery).Methods("POST").HandlerFunc(f.HandleSeriesQuery)
-	a.Path("/" + api.EndpointRender).Methods("GET").HandlerFunc(f.HandleGetRender)
-	a.Path("/" + api.EndpointDashboard).Methods("GET").HandlerFunc(f.HandleGetDashboard)
-	a.Path("/" + api.EndpointDashboardList).Methods("GET").HandlerFunc(f.HandleGetDashboardList)
-	a.Path("/"+api.EndpointDashboard).Methods("POST", "PUT").HandlerFunc(f.HandlePutPostDashboard)
-	a.Path("/" + api.EndpointGroup).Methods("GET").HandlerFunc(f.HandleGetGroup)
-	a.Path("/" + api.EndpointGroupList).Methods("GET").HandlerFunc(f.HandleGetGroupsList)
-	a.Path("/"+api.EndpointGroup).Methods("POST", "PUT").HandlerFunc(f.HandlePutPostGroup)
-	a.Path("/"+api.EndpointNamespace).Methods("POST", "PUT").HandlerFunc(f.HandlePostNamespace)
-	a.Path("/" + api.EndpointNamespace).Methods("GET").HandlerFunc(f.HandleGetNamespace)
-	a.Path("/" + api.EndpointNamespaceList).Methods("GET").HandlerFunc(f.HandleGetNamespaceList)
-	a.Path("/" + api.EndpointPrometheus).Methods("GET").HandlerFunc(f.HandleGetPromConfig)
-	a.Path("/" + api.EndpointPrometheus).Methods("POST").HandlerFunc(f.HandlePostPromConfig)
-	a.Path("/" + api.EndpointPrometheusGenerated).Methods("GET").HandlerFunc(f.HandleGetPromConfigGenerated)
-	a.Path("/" + api.EndpointKnownTags).Methods("POST").HandlerFunc(f.HandlePostKnownTags)
-	a.Path("/" + api.EndpointKnownTags).Methods("GET").HandlerFunc(f.HandleGetKnownTags)
-	a.Path("/" + api.EndpointStatistics).Methods("POST").HandlerFunc(f.HandleFrontendStat)
-	a.Path("/" + api.EndpointHistory).Methods("GET").HandlerFunc(f.HandleGetHistory)
+	a.Path("/"+api.EndpointLegacyRedirect).Methods("GET", "HEAD", "POST").HandlerFunc(f.HandleLegacyRedirect) // doesn't touch ch tables
+	a.Path("/" + api.EndpointMetricList).Methods("GET").HandlerFunc(f.HandleGetMetricsList)                   // doesn't touch ch tables
+	a.Path("/" + api.EndpointMetricTagValues).Methods("GET").HandlerFunc(f.HandleGetMetricTagValues)          // v3 tables supported
+	a.Path("/" + api.EndpointMetric).Methods("GET").HandlerFunc(f.HandleGetMetric)                            // doesn't touch ch tables
+	a.Path("/" + api.EndpointMetric).Methods("POST").HandlerFunc(f.HandlePostMetric)                          // doesn't touch ch tables
+	a.Path("/" + api.EndpointResetFlood).Methods("POST").HandlerFunc(f.HandlePostResetFlood)                  // doesn't touch ch tables
+	a.Path("/" + api.EndpointQuery).Methods("GET").HandlerFunc(f.HandleSeriesQuery)                           // partially supported, have do fix point query
+	a.Path("/" + api.EndpointPoint).Methods("GET").HandlerFunc(f.HandlePointQuery)                            // TODO: not supported
+	a.Path("/" + api.EndpointPoint).Methods("POST").HandlerFunc(f.HandlePointQuery)                           // TODO: not supported
+	a.Path("/" + api.EndpointTable).Methods("GET").HandlerFunc(f.HandleGetTable)                              // TODO: should work but needs check
+	a.Path("/" + api.EndpointQuery).Methods("POST").HandlerFunc(f.HandleSeriesQuery)                          // partially supported, have to fix point query
+	a.Path("/" + api.EndpointRender).Methods("GET").HandlerFunc(f.HandleGetRender)                            // TODO: should work needs check
+	a.Path("/" + api.EndpointDashboard).Methods("GET").HandlerFunc(f.HandleGetDashboard)                      // doesn't touch ch tables
+	a.Path("/" + api.EndpointDashboardList).Methods("GET").HandlerFunc(f.HandleGetDashboardList)              // doesn't touch ch tables
+	a.Path("/"+api.EndpointDashboard).Methods("POST", "PUT").HandlerFunc(f.HandlePutPostDashboard)            // doesn't touch ch tables
+	a.Path("/" + api.EndpointGroup).Methods("GET").HandlerFunc(f.HandleGetGroup)                              // doesn't touch ch tables
+	a.Path("/" + api.EndpointGroupList).Methods("GET").HandlerFunc(f.HandleGetGroupsList)                     // doesn't touch ch tables
+	a.Path("/"+api.EndpointGroup).Methods("POST", "PUT").HandlerFunc(f.HandlePutPostGroup)                    // doesn't touch ch tables
+	a.Path("/"+api.EndpointNamespace).Methods("POST", "PUT").HandlerFunc(f.HandlePostNamespace)               // doesn't touch ch tables
+	a.Path("/" + api.EndpointNamespace).Methods("GET").HandlerFunc(f.HandleGetNamespace)                      // doesn't touch ch tables
+	a.Path("/" + api.EndpointNamespaceList).Methods("GET").HandlerFunc(f.HandleGetNamespaceList)              // doesn't touch ch tables
+	a.Path("/" + api.EndpointPrometheus).Methods("GET").HandlerFunc(f.HandleGetPromConfig)                    // doesn't touch ch tables
+	a.Path("/" + api.EndpointPrometheus).Methods("POST").HandlerFunc(f.HandlePostPromConfig)                  // doesn't touch ch tables
+	a.Path("/" + api.EndpointPrometheusGenerated).Methods("GET").HandlerFunc(f.HandleGetPromConfigGenerated)  // doesn't touch ch tables
+	a.Path("/" + api.EndpointKnownTags).Methods("POST").HandlerFunc(f.HandlePostKnownTags)                    // doesn't touch ch tables
+	a.Path("/" + api.EndpointKnownTags).Methods("GET").HandlerFunc(f.HandleGetKnownTags)                      // doesn't touch ch tables
+	a.Path("/" + api.EndpointStatistics).Methods("POST").HandlerFunc(f.HandleFrontendStat)                    // doesn't touch ch tables
+	a.Path("/" + api.EndpointHistory).Methods("GET").HandlerFunc(f.HandleGetHistory)                          // doesn't touch ch tables
 	m.Path("/prom/api/v1/query").Methods("GET").HandlerFunc(f.HandleInstantQuery)
 	m.Path("/prom/api/v1/query").Methods("POST").HandlerFunc(f.HandleInstantQuery)
 	m.Path("/prom/api/v1/query_range").Methods("GET").HandlerFunc(f.HandleRangeQuery)
