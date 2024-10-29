@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	ApproxCacheMaxSize int
+	v3AfterTs          int64
 }
 
 func (argv *Config) ValidateConfig() error {
@@ -25,6 +26,7 @@ func (argv *Config) Copy() config.Config {
 func (argv *Config) Bind(pflag *pflag.FlagSet, defaultI config.Config) {
 	default_ := defaultI.(*Config)
 	pflag.IntVar(&argv.ApproxCacheMaxSize, "approx-cache-max-size", default_.ApproxCacheMaxSize, "approximate max amount of rows to cache for each table+resolution")
+	pflag.Int64Var(&argv.v3AfterTs, "v3-after-ts", 0, "use v3 table after specified timestamp")
 }
 
 func DefaultConfig() *Config {
@@ -45,7 +47,6 @@ type HandlerOptions struct {
 	weekStartAt             int
 	location                *time.Location
 	utcOffset               int64
-	v3AfterTs               int64
 }
 
 func (argv *HandlerOptions) Bind(pflag *pflag.FlagSet) {
@@ -58,7 +59,6 @@ func (argv *HandlerOptions) Bind(pflag *pflag.FlagSet) {
 	pflag.StringSliceVar(&argv.protectedMetricPrefixes, "protected-metric-prefixes", nil, "comma-separated list of metric prefixes that require access bits set")
 	pflag.StringVar(&argv.timezone, "timezone", "Europe/Moscow", "location of the desired timezone")
 	pflag.IntVar(&argv.weekStartAt, "week-start", int(time.Monday), "week day of beginning of the week (from sunday=0 to saturday=6)")
-	pflag.Int64Var(&argv.v3AfterTs, "v3-after-ts", 0, "use v3 table after specified timestamp")
 }
 
 func (argv *HandlerOptions) LoadLocation() error {

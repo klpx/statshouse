@@ -446,7 +446,8 @@ func (h *Handler) QuerySeries(ctx context.Context, qry *promql.SeriesQuery) (pro
 		}
 	}
 	version := data_model.VersionOrDefault(qry.Options.Version)
-	if h.v3AfterTs > 0 && qry.Timescale.Time[0]-qry.Offset > h.v3AfterTs {
+	v3AfterTs := h.v3AfterTs.Load()
+	if v3AfterTs > 0 && qry.Timescale.Time[0]-qry.Offset > v3AfterTs {
 		version = Version3
 	}
 	var lods []data_model.LOD

@@ -91,7 +91,6 @@ type QueryStat struct {
 type GetTimescaleArgs struct {
 	QueryStat
 	Version     string
-	V3AfterTs   int64
 	Start       int64 // inclusive
 	End         int64 // exclusive
 	Step        int64
@@ -282,9 +281,6 @@ func GetTimescale(args GetTimescaleArgs) (Timescale, error) {
 		levels  []lodSwitch // depends on query and version
 		version = VersionOrDefault(args.Version)
 	)
-	if args.V3AfterTs != 0 && version == Version2 && args.Start > args.V3AfterTs {
-		version = Version3
-	}
 	// find appropriate LOD table
 	switch {
 	case args.Step == _1M:

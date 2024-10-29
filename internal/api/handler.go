@@ -198,6 +198,7 @@ type (
 		bufferPoolBytesAlloc  statshouse.MetricRef
 		bufferPoolBytesFree   statshouse.MetricRef
 		bufferPoolBytesTotal  statshouse.MetricRef
+		v3AfterTs             atomic.Int64
 	}
 
 	//easyjson:json
@@ -600,9 +601,11 @@ func NewHandler(staticDir fs.FS, jsSettings JSSettings, showInvisible bool, chV1
 
 	h.cache = newTSCacheGroup(cfg.ApproxCacheMaxSize, data_model.LODTables, h.utcOffset, h.loadPoints, cacheDefaultDropEvery)
 	h.pointsCache = newPointsCache(cfg.ApproxCacheMaxSize, h.utcOffset, h.loadPoint, time.Now)
+	h.v3AfterTs.Store(cfg.v3AfterTs)
 	cl.AddChangeCB(func(c config.Config) {
 		cfg := c.(*Config)
 		h.cache.changeMaxSize(cfg.ApproxCacheMaxSize)
+		h.v3AfterTs.Store(cfg.v3AfterTs)
 	})
 	go h.invalidateLoop()
 	h.rmID = statshouse.StartRegularMeasurement(func(client *statshouse.Client) { // TODO - stop
@@ -1811,11 +1814,6 @@ func (c *tagValuesSelectCols) rowAt(i int) selectRow {
 }
 
 func (h *Handler) handleGetMetricTagValues(ctx context.Context, req getMetricTagValuesReq) (resp *GetMetricTagValuesResp, immutable bool, err error) {
-	version, err := parseVersion(req.version)
-	if err != nil {
-		return nil, false, err
-	}
-
 	var numResults int
 	if req.numResults == "" || req.numResults == "0" {
 		numResults = defTagValues
@@ -1828,7 +1826,7 @@ func (h *Handler) handleGetMetricTagValues(ctx context.Context, req getMetricTag
 		return nil, false, err
 	}
 
-	err = validateQuery(metricMeta, version)
+	err = validateQuery(metricMeta, req.version)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1847,17 +1845,17 @@ func (h *Handler) handleGetMetricTagValues(ctx context.Context, req getMetricTag
 	if err != nil {
 		return nil, false, err
 	}
-	mappedFilterIn, err := h.resolveFilter(metricMeta, version, filterIn)
+	mappedFilterIn, err := h.resolveFilter(metricMeta, req.version, filterIn)
 	if err != nil {
 		return nil, false, err
 	}
-	mappedFilterNotIn, err := h.resolveFilter(metricMeta, version, filterNotIn)
+	mappedFilterNotIn, err := h.resolveFilter(metricMeta, req.version, filterNotIn)
 	if err != nil {
 		return nil, false, err
 	}
 	var filterInV3 map[string][]maybeMappedTag
 	var filterNotInV3 map[string][]maybeMappedTag
-	if version == Version3 {
+	if req.version == Version3 {
 		filterInV3, err = h.resolveFilterV3(metricMeta, filterIn)
 		if err != nil {
 			return nil, false, err
@@ -1870,7 +1868,6 @@ func (h *Handler) handleGetMetricTagValues(ctx context.Context, req getMetricTag
 
 	lods, err := data_model.GetLODs(data_model.GetTimescaleArgs{
 		Version:     req.version,
-		V3AfterTs:   h.v3AfterTs,
 		Start:       from.Unix(),
 		End:         to.Unix(),
 		ScreenWidth: 100, // really dumb
@@ -2335,12 +2332,8 @@ func (h *Handler) handleGetTable(ctx context.Context, ai accessInfo, debugQuerie
 	if err != nil {
 		return nil, false, err
 	}
-	version := req.version
-	if h.v3AfterTs > 0 && req.version == Version2 && req.from.Unix() > h.v3AfterTs {
-		version = Version3
-	}
 	lods, err := data_model.GetLODs(data_model.GetTimescaleArgs{
-		Version:     version,
+		Version:     req.version,
 		Start:       req.from.Unix(),
 		End:         req.to.Unix(),
 		Step:        req.step,
@@ -3229,6 +3222,26 @@ func (h *Handler) checkReadOnlyMode(w http.ResponseWriter, _ *http.Request) (rea
 		return true
 	}
 	return false
+}
+
+func (h *Handler) getVersion(s string, from int64) (string, error) {
+	if s == "" {
+		s = Version2
+	}
+	if s == Version2 {
+		v3AfterTs := h.v3AfterTs.Load()
+		if v3AfterTs > 0 && v3AfterTs < from {
+			return Version3, nil
+		}
+	}
+
+	for _, v := range []string{Version1, Version2, Version3} {
+		if s == v {
+			return v, nil
+		}
+	}
+
+	return "", httpErr(http.StatusBadRequest, fmt.Errorf("invalid version: %q", s))
 }
 
 func (h *Handler) waitVersionUpdate(ctx context.Context, version int64) error {
