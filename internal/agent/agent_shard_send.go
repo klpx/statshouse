@@ -162,6 +162,7 @@ func sourceBucketToTL(bucket *data_model.MetricsBucket, perm []int, sampleFactor
 			continue
 		}
 		item := k.TLMultiItemFromKey(bucket.Time)
+		item.SetSkeys(v.STagSlice())
 		v.Tail.MultiValueToTL(&item.Tail, v.SF, &item.FieldsMask, &marshalBuf)
 		sizeBuf = item.Write(sizeBuf[:0])
 		switch { // This is only an approximation

@@ -26,11 +26,6 @@ type (
 		Timestamp uint32
 		Metric    int32
 		Tags      [format.MaxTags]int32 // Unused tags are set to special 0-value
-		sTags     *sTagsHolder          // If no stags are used then nil
-	}
-
-	sTagsHolder struct {
-		values [format.MaxTags]string
 	}
 
 	ItemCounter struct {
@@ -54,6 +49,7 @@ type (
 
 	// All our items are technically string tops, but most have empty Top map
 	MultiItem struct {
+		STags            [format.MaxTags]string
 		Top              map[string]*MultiValue
 		Tail             MultiValue // elements not in top are collected here
 		sampleFactorLog2 int
@@ -76,26 +72,9 @@ const sipKeyB = 0xc302580679a8cef2
 
 func (s *ItemCounter) Count() float64 { return s.counter }
 
-func (k *Key) SetSTag(i int, s string) {
-	if k.sTags == nil {
-		k.sTags = new(sTagsHolder)
-	}
-	k.sTags.values[i] = s
-}
-
-func (k *Key) GetSTag(i int) string {
-	if k.sTags == nil {
-		return ""
-	}
-	return k.sTags.values[i]
-}
-
-func (k *Key) STagSlice() []string {
-	if k.sTags == nil {
-		return []string{}
-	}
-	result := append([]string{}, k.sTags.values[:]...)
-	i := format.MaxTags
+func (mi *MultiItem) STagSlice() []string {
+	result := append([]string{}, mi.STags[:]...)
+	i := len(result)
 	for ; i != 0; i-- {
 		if len(result[i-1]) != 0 {
 			break

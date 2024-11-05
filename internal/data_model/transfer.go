@@ -46,11 +46,6 @@ func KeyFromStatshouseMultiItem(item *tlstatshouse.MultiItemBytes, bucketTimesta
 	}
 	key.Metric = item.Metric
 	copy(key.Tags[:], item.Keys)
-	if item.IsSetSkeys() {
-		for i := range item.Skeys {
-			key.SetSTag(i, string(item.Skeys[i]))
-		}
-	}
 	return key, int(sID)
 }
 
@@ -63,21 +58,6 @@ func (k *Key) TLSizeEstimate(defaultTimestamp uint32) int {
 		}
 	}
 	sz += 4 + 4 + 4*i // metric, # of tags, tags
-	i = format.MaxTags
-	for ; i != 0; i-- {
-		if len(k.GetSTag(i-1)) != 0 {
-			break
-		}
-	}
-	// we send stags only if we have at least one
-	if i > 0 {
-		sz += 4 // # of stags
-		for ; i != 0; i-- {
-			l := 1 + len(k.GetSTag(i-1)) // stag len + data
-			l += (4 - l%4) % 4           // align to 4 bytes
-			sz += l
-		}
-	}
 	if k.Timestamp != 0 && k.Timestamp != defaultTimestamp {
 		sz += 4 // timestamp
 	}
@@ -88,10 +68,6 @@ func (k *Key) TLMultiItemFromKey(defaultTimestamp uint32) tlstatshouse.MultiItem
 	item := tlstatshouse.MultiItem{
 		Metric: k.Metric,
 		Keys:   k.TagSlice(),
-	}
-	stags := k.STagSlice()
-	if len(stags) > 0 {
-		item.SetSkeys(stags)
 	}
 	// TODO - check that timestamp is never 0 here
 	if k.Timestamp != 0 && k.Timestamp != defaultTimestamp {

@@ -6,7 +6,6 @@
 package data_model
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/vkcom/statshouse/internal/data_model/gen2/tlstatshouse"
-	"github.com/vkcom/statshouse/internal/format"
 )
 
 const (
@@ -42,25 +40,6 @@ func genKey() *rapid.Generator[Key] {
 		for i := range key.Tags {
 			key.Tags[i] = int32(rapid.Int64Range(0, 1000).Draw(t, "tag"))
 		}
-
-		// Generate STags with different patterns
-		pattern := rapid.IntRange(0, 3).Draw(t, "stags_pattern")
-		switch pattern {
-		case 0: // All empty
-			// STags already initialized as empty strings
-		case 1: // One non-empty
-			idx := rapid.IntRange(0, format.MaxTags-1).Draw(t, "stag_index")
-			key.SetSTag(idx, rapid.StringN(1, 20, maxSTagLength).Draw(t, "stag"))
-		case 2: // Half filled
-			for i := 0; i < format.MaxTags/2; i++ {
-				key.SetSTag(i, rapid.StringN(1, 20, maxSTagLength).Draw(t, "stag"))
-			}
-		case 3: // All filled
-			for i := range key.Tags {
-				key.SetSTag(i, rapid.StringN(1, 20, maxSTagLength).Draw(t, "stag"))
-			}
-		}
-
 		return key
 	})
 }
@@ -85,94 +64,6 @@ func TestKeySizeEstimationProperty(t *testing.T) {
 				estimated, actual, key)
 		}
 	})
-}
-
-func TestKeySizeEstimationEdgeCases(t *testing.T) {
-	testCases := []struct {
-		name string
-		key  Key
-	}{
-		{
-			name: "Empty key",
-			key:  Key{},
-		},
-		{
-			name: "Only timestamp",
-			key: Key{
-				Timestamp: 12345,
-			},
-		},
-		{
-			name: "Only metric",
-			key: Key{
-				Metric: 67890,
-			},
-		},
-		{
-			name: "Single tag",
-			key: Key{
-				Tags: [format.MaxTags]int32{42},
-			},
-		},
-		{
-			name: "Single STag",
-			key: Key{
-				sTags: &sTagsHolder{[format.MaxTags]string{"test"}},
-			},
-		},
-		{
-			name: "Single STag max length",
-			key: Key{
-				sTags: &sTagsHolder{[format.MaxTags]string{strings.Repeat("a", maxSTagLength)}},
-			},
-		},
-		{
-			name: "All fields filled with max length STags",
-			key: Key{
-				Timestamp: 12345,
-				Metric:    67890,
-				Tags:      [format.MaxTags]int32{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
-				sTags: func() *sTagsHolder {
-					var stags sTagsHolder
-					for i := 0; i < format.MaxTags; i++ {
-						stags.values[i] = strings.Repeat("a", maxSTagLength)
-					}
-					return &stags
-				}(),
-			},
-		},
-		{
-			name: "Timestamp equals defaultTimestamp",
-			key: Key{
-				Timestamp: 12345, // Will be passed as defaultTimestamp in test
-				Metric:    67890,
-			},
-		},
-		{
-			name: "Mixed length STags",
-			key: Key{
-				sTags: func() *sTagsHolder {
-					var stags sTagsHolder
-					for i := 0; i < format.MaxTags; i++ {
-						stags.values[i] = strings.Repeat("a", i)
-					}
-					return &stags
-				}(),
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			defaultTimestamp := tc.key.Timestamp
-			estimated := tc.key.TLSizeEstimate(defaultTimestamp)
-			actual := getActualSize(t, tc.key, defaultTimestamp)
-
-			require.Equal(t, estimated, actual,
-				"Estimated size should be equal to actual size\nKey: %+v\nEstimated: %d\nActual: %d",
-				tc.key, estimated, actual)
-		})
-	}
 }
 
 // Helper function to convert Key to MultiItemBytes and back
@@ -235,7 +126,6 @@ func TestKeyFromStatshouseMultiItem(t *testing.T) {
 		// Verify key components
 		require.Equal(t, originalKey.Metric, reconstructedKey.Metric, "Metrics should match")
 		require.Equal(t, originalKey.Tags, reconstructedKey.Tags, "Tags should match")
-		require.Equal(t, originalKey.sTags, reconstructedKey.sTags, "STags should match")
 		timestampValid(t, originalKey.Timestamp, newestTime, reconstructedKey.Timestamp, bucketTimestamp)
 	})
 }

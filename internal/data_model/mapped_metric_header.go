@@ -26,6 +26,7 @@ type MappedMetricHeader struct {
 	ReceiveTime time.Time // Saved at mapping start and used where we need time.Now. This is different to MetricBatch.T, which is sent by clients
 	MetricMeta  *format.MetricMetaValue
 	Key         Key
+	STags       [format.MaxTags][]byte
 	SValue      []byte // reference to memory inside tlstatshouse.MetricBytes.
 	HostTag     int32
 
@@ -68,8 +69,8 @@ func (h *MappedMetricHeader) SetTag(index int, id int32, tagIDKey int32) {
 	}
 }
 
-func (h *MappedMetricHeader) SetSTag(index int, value string, tagIDKey int32) {
-	h.Key.SetSTag(index, value)
+func (h *MappedMetricHeader) SetSTag(index int, value []byte, tagIDKey int32) {
+	h.STags[index] = value
 	if h.IsTagSet[index] {
 		h.TagSetTwiceKey = tagIDKey
 	}
