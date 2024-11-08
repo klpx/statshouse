@@ -7,6 +7,9 @@ import (
 
 	"github.com/cornelk/hashmap"
 	"github.com/dolthub/swiss"
+
+	"github.com/zeebo/xxh3"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -143,6 +146,131 @@ func (mc *HashMapCache) Get(key Key) *Item {
 	return item
 }
 
+// XXHash-based map implementation
+type XXHashMapCache struct {
+	items   map[uint64]*Item
+	tmpHeap []byte
+}
+
+func NewXXHashMapCache() *XXHashMapCache {
+	return &XXHashMapCache{
+		items: make(map[uint64]*Item),
+	}
+}
+
+func (mc *XXHashMapCache) getTempBuffer(size int) []byte {
+	if cap(mc.tmpHeap) >= size {
+		mc.tmpHeap = mc.tmpHeap[:size]
+		return mc.tmpHeap
+	}
+	mc.tmpHeap = make([]byte, size)
+	return mc.tmpHeap
+}
+
+func (mc *XXHashMapCache) Get(key Key) *Item {
+	size := requiredBufferSize(&key)
+	buf := mc.getTempBuffer(size)
+
+	// Compute key bytes
+	for i := 0; i < nTags; i++ {
+		binary.LittleEndian.PutUint32(buf[i*4:], uint32(key.Tags[i]))
+	}
+	copy(buf[nTags*4:], key.Slice)
+
+	// Use xxh3 hash instead of string key
+	hashKey := xxh3.Hash(buf)
+
+	item, ok := mc.items[hashKey]
+	if !ok {
+		item = newItem(key)
+		mc.items[hashKey] = item
+	}
+	return item
+}
+
+// PreallocMapCache pre-allocates map with size hint and uses maps.Clear
+type PreallocMapCache struct {
+	items   map[string]*Item
+	tmpHeap []byte
+}
+
+func NewPreallocMapCache(sizeHint int) *PreallocMapCache {
+	return &PreallocMapCache{
+		items: make(map[string]*Item, sizeHint),
+	}
+}
+
+func (mc *PreallocMapCache) getTempBuffer(size int) []byte {
+	if cap(mc.tmpHeap) >= size {
+		mc.tmpHeap = mc.tmpHeap[:size]
+		return mc.tmpHeap
+	}
+	mc.tmpHeap = make([]byte, size)
+	return mc.tmpHeap
+}
+
+func (mc *PreallocMapCache) Get(key Key) *Item {
+	size := requiredBufferSize(&key)
+	buf := mc.getTempBuffer(size)
+	keyStr := computeKeyString(buf, &key)
+
+	item, ok := mc.items[keyStr]
+	if !ok {
+		item = newItem(key)
+		mc.items[keyStr] = item
+	}
+	return item
+}
+
+// Clear clears the map without reallocating
+func (mc *PreallocMapCache) Clear() {
+	maps.Clear(mc.items)
+}
+
+// Combined approach: XXHash + Preallocation
+type XXHashPreallocMapCache struct {
+	items   map[uint64]*Item
+	tmpHeap []byte
+}
+
+func NewXXHashPreallocMapCache(sizeHint int) *XXHashPreallocMapCache {
+	return &XXHashPreallocMapCache{
+		items: make(map[uint64]*Item, sizeHint),
+	}
+}
+
+func (mc *XXHashPreallocMapCache) getTempBuffer(size int) []byte {
+	if cap(mc.tmpHeap) >= size {
+		mc.tmpHeap = mc.tmpHeap[:size]
+		return mc.tmpHeap
+	}
+	mc.tmpHeap = make([]byte, size)
+	return mc.tmpHeap
+}
+
+func (mc *XXHashPreallocMapCache) Get(key Key) *Item {
+	size := requiredBufferSize(&key)
+	buf := mc.getTempBuffer(size)
+
+	for i := 0; i < nTags; i++ {
+		binary.LittleEndian.PutUint32(buf[i*4:], uint32(key.Tags[i]))
+	}
+	copy(buf[nTags*4:], key.Slice)
+
+	hashKey := xxh3.Hash(buf)
+
+	item, ok := mc.items[hashKey]
+	if !ok {
+		item = newItem(key)
+		mc.items[hashKey] = item
+	}
+	return item
+}
+
+func (mc *XXHashPreallocMapCache) Clear() {
+	maps.Clear(mc.items)
+}
+
 func BenchmarkMapImplementations(b *testing.B) {
 	benchCases := []struct {
 		name     string
@@ -208,6 +336,64 @@ func BenchmarkMapImplementations(b *testing.B) {
 				for _, key := range keys {
 					_ = cache.Get(key)
 				}
+			}
+		})
+
+		b.Run("xxhash-map-"+bc.name, func(b *testing.B) {
+			cache := NewXXHashMapCache()
+			for _, key := range keys {
+				_ = cache.Get(key)
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, key := range keys {
+					_ = cache.Get(key)
+				}
+			}
+		})
+
+		b.Run("prealloc-map-"+bc.name, func(b *testing.B) {
+			cache := NewPreallocMapCache(bc.numItems)
+			for _, key := range keys {
+				_ = cache.Get(key)
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, key := range keys {
+					_ = cache.Get(key)
+				}
+			}
+		})
+
+		b.Run("xxhash-prealloc-map-"+bc.name, func(b *testing.B) {
+			cache := NewXXHashPreallocMapCache(bc.numItems)
+			for _, key := range keys {
+				_ = cache.Get(key)
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, key := range keys {
+					_ = cache.Get(key)
+				}
+			}
+		})
+
+		// Benchmark with map clearing
+		b.Run("prealloc-map-with-clear-"+bc.name, func(b *testing.B) {
+			cache := NewPreallocMapCache(bc.numItems)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, key := range keys {
+					_ = cache.Get(key)
+				}
+				cache.Clear()
 			}
 		})
 	}
