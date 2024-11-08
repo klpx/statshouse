@@ -51,6 +51,12 @@ require (
 )
 
 require (
+	github.com/cornelk/hashmap v1.0.8 // indirect
+	github.com/dolthub/maphash v0.1.0 // indirect
+	github.com/dolthub/swiss v0.2.1 // indirect
+)
+
+require (
 	cloud.google.com/go/compute v1.9.0 // indirect
 	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/andybalholm/brotli v1.0.4 // indirect

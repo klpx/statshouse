@@ -4,6 +4,9 @@ import (
 	"encoding/binary"
 	"testing"
 	"unsafe"
+
+	"github.com/cornelk/hashmap"
+	"github.com/dolthub/swiss"
 )
 
 const (
@@ -16,44 +19,41 @@ type Key struct {
 }
 
 type Item struct {
-	Key Key
-	// Pre-computed string key to avoid allocations
+	Key       Key
 	stringKey string
-
-	SomeData [1000]byte
+	SomeData  [1000]byte
 }
 
-// newItem creates a new Item with pre-computed string key
+// Base implementation shared across different map types
 func newItem(key Key) *Item {
-	item := &Item{Key: key}
-	return item
+	return &Item{Key: key}
 }
 
-// requiredBufferSize calculates the required size for the key buffer
 func requiredBufferSize(key *Key) int {
 	return nTags*4 + len(key.Slice)
 }
 
-// GetKey returns the pre-computed string key
-func (mi *Item) GetKey() string {
-	return mi.stringKey
+func computeKeyString(buf []byte, key *Key) string {
+	for i := 0; i < nTags; i++ {
+		binary.LittleEndian.PutUint32(buf[i*4:], uint32(key.Tags[i]))
+	}
+	copy(buf[nTags*4:], key.Slice)
+	return unsafe.String(unsafe.SliceData(buf), len(buf))
 }
 
-// MapCache provides a way to look up Items by Key
-type MapCache struct {
+// Standard map implementation
+type StdMapCache struct {
 	items   map[string]*Item
 	tmpHeap []byte
 }
 
-// NewMapCache creates a new MapCache
-func NewMapCache() *MapCache {
-	return &MapCache{
+func NewStdMapCache() *StdMapCache {
+	return &StdMapCache{
 		items: make(map[string]*Item),
 	}
 }
 
-// getTempBuffer returns a buffer suitable for temporary key computation
-func (mc *MapCache) getTempBuffer(size int) []byte {
+func (mc *StdMapCache) getTempBuffer(size int) []byte {
 	if cap(mc.tmpHeap) >= size {
 		mc.tmpHeap = mc.tmpHeap[:size]
 		return mc.tmpHeap
@@ -62,19 +62,11 @@ func (mc *MapCache) getTempBuffer(size int) []byte {
 	return mc.tmpHeap
 }
 
-// Get returns an existing item or creates a new one if it doesn't exist
-func (mc *MapCache) Get(key Key) *Item {
+func (mc *StdMapCache) Get(key Key) *Item {
 	size := requiredBufferSize(&key)
 	buf := mc.getTempBuffer(size)
+	keyStr := computeKeyString(buf, &key)
 
-	// Compute key string using appropriate buffer
-	for i := 0; i < nTags; i++ {
-		binary.LittleEndian.PutUint32(buf[i*4:], uint32(key.Tags[i]))
-	}
-	copy(buf[nTags*4:], key.Slice)
-	keyStr := unsafe.String(unsafe.SliceData(buf), size)
-
-	// Look up or create item
 	item, ok := mc.items[keyStr]
 	if !ok {
 		item = newItem(key)
@@ -83,47 +75,140 @@ func (mc *MapCache) Get(key Key) *Item {
 	return item
 }
 
-func BenchmarkMapCacheMultiItem(b *testing.B) {
-	b.Run("small-keys", func(b *testing.B) {
-		cache := NewMapCache()
-		keys := make([]Key, 1000)
-		for i := 0; i < 1000; i++ {
-			keys[i] = Key{[nTags]int32{1, 2, 3}, []byte("some_data")}
+// Swiss map implementation
+type SwissMapCache struct {
+	items   *swiss.Map[string, *Item]
+	tmpHeap []byte
+}
+
+func NewSwissMapCache() *SwissMapCache {
+	return &SwissMapCache{
+		items: swiss.NewMap[string, *Item](16), // initial size hint
+	}
+}
+
+func (mc *SwissMapCache) getTempBuffer(size int) []byte {
+	if cap(mc.tmpHeap) >= size {
+		mc.tmpHeap = mc.tmpHeap[:size]
+		return mc.tmpHeap
+	}
+	mc.tmpHeap = make([]byte, size)
+	return mc.tmpHeap
+}
+
+func (mc *SwissMapCache) Get(key Key) *Item {
+	size := requiredBufferSize(&key)
+	buf := mc.getTempBuffer(size)
+	keyStr := computeKeyString(buf, &key)
+
+	item, ok := mc.items.Get(keyStr)
+	if !ok {
+		item = newItem(key)
+		mc.items.Put(keyStr, item)
+	}
+	return item
+}
+
+// Cornelk hashmap implementation
+type HashMapCache struct {
+	items   *hashmap.Map[string, *Item]
+	tmpHeap []byte
+}
+
+func NewHashMapCache() *HashMapCache {
+	return &HashMapCache{
+		items: hashmap.New[string, *Item](),
+	}
+}
+
+func (mc *HashMapCache) getTempBuffer(size int) []byte {
+	if cap(mc.tmpHeap) >= size {
+		mc.tmpHeap = mc.tmpHeap[:size]
+		return mc.tmpHeap
+	}
+	mc.tmpHeap = make([]byte, size)
+	return mc.tmpHeap
+}
+
+func (mc *HashMapCache) Get(key Key) *Item {
+	size := requiredBufferSize(&key)
+	buf := mc.getTempBuffer(size)
+	keyStr := computeKeyString(buf, &key)
+
+	item, ok := mc.items.Get(keyStr)
+	if !ok {
+		item = newItem(key)
+		mc.items.Set(keyStr, item)
+	}
+	return item
+}
+
+func BenchmarkMapImplementations(b *testing.B) {
+	benchCases := []struct {
+		name     string
+		keySize  int
+		numItems int
+	}{
+		{"small-keys-1k", 10, 1_000},
+		{"large-keys-1k", 1000, 1_000},
+		{"small-keys-10k", 10, 10_000},
+		{"large-keys-10k", 1000, 10_000},
+	}
+
+	for _, bc := range benchCases {
+		// Generate test data
+		keys := make([]Key, bc.numItems)
+		dataSlice := make([]byte, bc.keySize)
+		for i := 0; i < bc.numItems; i++ {
+			keys[i] = Key{[nTags]int32{1, 2, 3}, dataSlice}
 		}
 
-		// Pre-warm the cache
-		for _, key := range keys {
-			_ = cache.Get(key)
-		}
-
-		b.ResetTimer()
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		b.Run("std-map-"+bc.name, func(b *testing.B) {
+			cache := NewStdMapCache()
+			// Pre-warm
 			for _, key := range keys {
 				_ = cache.Get(key)
 			}
-		}
-	})
 
-	b.Run("large-keys", func(b *testing.B) {
-		cache := NewMapCache()
-		keys := make([]Key, 1000)
-		largeSlice := make([]byte, 1000) // slice larger than inlineKeySize
-		for i := 0; i < 1000; i++ {
-			keys[i] = Key{[nTags]int32{1, 2, 3}, largeSlice}
-		}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, key := range keys {
+					_ = cache.Get(key)
+				}
+			}
+		})
 
-		// Pre-warm the cache
-		for _, key := range keys {
-			_ = cache.Get(key)
-		}
-
-		b.ResetTimer()
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		b.Run("swiss-map-"+bc.name, func(b *testing.B) {
+			cache := NewSwissMapCache()
+			// Pre-warm
 			for _, key := range keys {
 				_ = cache.Get(key)
 			}
-		}
-	})
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, key := range keys {
+					_ = cache.Get(key)
+				}
+			}
+		})
+
+		b.Run("hashmap-"+bc.name, func(b *testing.B) {
+			cache := NewHashMapCache()
+			// Pre-warm
+			for _, key := range keys {
+				_ = cache.Get(key)
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				for _, key := range keys {
+					_ = cache.Get(key)
+				}
+			}
+		})
+	}
 }
