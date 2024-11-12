@@ -281,6 +281,10 @@ func BenchmarkMapImplementations(b *testing.B) {
 		{"large-keys-1k", 1000, 1_000},
 		{"small-keys-10k", 10, 10_000},
 		{"large-keys-10k", 1000, 10_000},
+		{"small-keys-100k", 10, 100_000},
+		{"large-keys-100k", 1000, 100_000},
+		{"small-keys-1M", 10, 1_000_000},
+		{"large-keys-1M", 1000, 1_000_000},
 	}
 
 	for _, bc := range benchCases {
