@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/vkcom/statshouse/internal/data_model"
 	"github.com/vkcom/statshouse/internal/data_model/gen2/tlmetadata"
 	"github.com/vkcom/statshouse/internal/format"
 	"github.com/vkcom/statshouse/internal/pcache"
@@ -242,36 +243,49 @@ func (ms *MetricsStorage) GetMetaMetricList(includeInvisible bool) []*format.Met
 	return li
 }
 
-func (ms *MetricsStorage) MatchMetrics(matcher *labels.Matcher, namespace string, includeInvisible bool, s []*format.MetricMetaValue) []*format.MetricMetaValue {
+type accessCheck = func(format.MetricMetaValue) bool
+
+func (ms *MetricsStorage) MatchMetrics(cb accessCheck, matcher *labels.Matcher, namespace string, includeInvisible bool) (data_model.QueryFilter, bool) {
+	var res data_model.QueryFilter
 	if namespace == "" || namespace == "__default" {
-		s = ms.matchMetrics(format.BuiltinMetricByName, matcher, namespace, includeInvisible, s)
+		if !ms.matchMetrics(cb, format.BuiltinMetricByName, matcher, namespace, includeInvisible, &res) {
+			return data_model.QueryFilter{}, false
+		}
 	}
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
-	s = ms.matchMetrics(ms.metricsByName, matcher, namespace, includeInvisible, s)
-	return s
+	if !ms.matchMetrics(cb, ms.metricsByName, matcher, namespace, includeInvisible, &res) {
+		return data_model.QueryFilter{}, false
+	}
+	return res, true
 }
 
-func (ms *MetricsStorage) matchMetrics(mertics map[string]*format.MetricMetaValue, matcher *labels.Matcher, namespace string, includeInvisible bool, s []*format.MetricMetaValue) []*format.MetricMetaValue {
+func (ms *MetricsStorage) matchMetrics(cb accessCheck, mertics map[string]*format.MetricMetaValue, matcher *labels.Matcher, namespace string, includeInvisible bool, f *data_model.QueryFilter) bool {
 	if matcher.Type == labels.MatchEqual {
 		name := matcher.Value
 		if namespace != "" && !strings.Contains(name, format.NamespaceSeparator) {
 			name = namespace + format.NamespaceSeparator + name
 		}
 		if v := mertics[name]; v != nil {
-			s = append(s, v)
+			if !cb(*v) {
+				return false
+			}
+			f.Add(v, matcher)
 		}
-		return s
+		return true
 	}
 	for name, v := range mertics {
 		if namespace != "" && !strings.Contains(name, format.NamespaceSeparator) {
 			name = namespace + format.NamespaceSeparator + name
 		}
 		if matcher.Matches(name) {
-			s = append(s, v)
+			if !cb(*v) {
+				return false
+			}
+			f.Add(v, matcher)
 		}
 	}
-	return s
+	return true
 }
 
 func (ms *MetricsStorage) GetGroupBy(metric *format.MetricMetaValue) *format.MetricsGroup {

@@ -108,7 +108,7 @@ type evaluator struct {
 	hh  hash.Hash64
 
 	// metric -> tag index -> offset -> tag value id -> tag value
-	tags map[*format.MetricMetaValue][]map[int64]map[int32]string
+	tags map[*format.MetricMetaValue][]map[int64]data_model.TagValues
 	// metric -> offset -> String TOP
 	stop map[*format.MetricMetaValue]map[int64][]string
 
@@ -305,7 +305,7 @@ func (ng Engine) newEvaluator(ctx context.Context, h Handler, qry Query) (evalua
 		}
 	}
 	// final touch
-	ev.tags = make(map[*format.MetricMetaValue][]map[int64]map[int32]string)
+	ev.tags = make(map[*format.MetricMetaValue][]map[int64]data_model.TagValues)
 	ev.stop = make(map[*format.MetricMetaValue]map[int64][]string)
 	ev.timeQueryParseEnd = time.Now()
 	return ev, nil
@@ -369,29 +369,12 @@ func (ev *evaluator) matchMetrics(sel *parser.VectorSelector, path []parser.Node
 	for _, matcher := range sel.LabelMatchers {
 		switch matcher.Name {
 		case labels.MetricName:
-			metrics, err := ev.MatchMetrics(ev.ctx, matcher, ev.opt.Namespace)
+			var err error
+			sel.QueryFilter, err = ev.MatchMetrics(matcher, ev.opt.Namespace)
 			if err != nil {
 				return err
 			}
-			if len(metrics) == 0 {
-				if ev.opt.Debug {
-					ev.Tracef("no metric matches %v", matcher)
-				}
-				return nil // metric does not exist, not an error
-			}
-			if ev.opt.Debug {
-				ev.Tracef("found %d metrics for %v", len(metrics), matcher)
-			}
-			for _, m := range metrics {
-				var selOffset int64
-				for _, v := range sel.Offsets {
-					if selOffset < v {
-						selOffset = v
-					}
-				}
-				ev.QueryStat.Add(m, selOffset+ev.opt.Offsets[0])
-				sel.MatchingMetrics = append(sel.MatchingMetrics, m)
-			}
+			sel.Matcher = matcher
 		case LabelWhat:
 			if matcher.Type != labels.MatchEqual {
 				return fmt.Errorf("%s supports only strict equality", LabelWhat)
@@ -920,12 +903,11 @@ func (ev *evaluator) evalBinary(expr *parser.BinaryExpr) ([]Series, error) {
 
 func (ev *evaluator) querySeries(sel *parser.VectorSelector) (srs []Series, err error) {
 	res := make([]Series, len(ev.opt.Offsets))
-	if len(sel.MatchingMetrics) > 1 && ev.opt.Mode == data_model.TagsQuery {
+	if sel.MatchingMetricCount() > 1 && ev.opt.Mode == data_model.TagsQuery {
 		for i := range res {
-			res[i].Data = make([]SeriesData, len(sel.MatchingMetrics))
-			for j, m := range sel.MatchingMetrics {
+			res[i].Data = make([]SeriesData, sel.MatchingMetricCount())
+			for j, m := range sel.MatchingMetrics() {
 				res[i].AddTagAt(j, &SeriesTag{
-					Metric: m,
 					ID:     labels.MetricName,
 					SValue: m.Name,
 				})
@@ -945,63 +927,62 @@ func (ev *evaluator) querySeries(sel *parser.VectorSelector) (srs []Series, err 
 			}()
 		}
 		offset := ev.opt.Offsets[j]
-		for i, metric := range sel.MatchingMetrics {
-			if ev.opt.Debug {
-				ev.Tracef("#%d request %s: %s", i, metric.Name, sel.What)
+		if ev.opt.Debug {
+			ev.Tracef("#%d request: %s", j, sel.What)
+		}
+		metric := sel.MatchingMetric()
+		for _, selOffset := range sel.Offsets {
+			qry, err := ev.buildSeriesQuery(ev.ctx, sel, sel.Whats, selOffset+offset)
+			if err != nil {
+				return err
 			}
-			for _, selOffset := range sel.Offsets {
-				qry, err := ev.buildSeriesQuery(ev.ctx, sel, metric, sel.Whats, selOffset+offset)
-				if err != nil {
-					return err
-				}
-				if qry.empty() {
-					if ev.opt.Debug {
-						ev.Tracef("#%d query is empty", i)
-					}
-					continue
-				}
-				if mu != nil {
-					mu.Unlock()
-					locked = false
-				}
-				sr, cancel, err := ev.QuerySeries(ev.ctx, &qry)
-				if err != nil {
-					return err
-				}
-				if mu != nil {
-					mu.Lock()
-					locked = true
-				}
-				ev.cancellationList = append(ev.cancellationList, cancel)
+			if qry.empty() {
 				if ev.opt.Debug {
-					ev.Tracef("#%d series count %d", i, len(sr.Data))
+					ev.Tracef("#%d query is empty", j)
 				}
-				for k, s := range [2][]*labels.Matcher{sel.MinHostMatchers, sel.MaxHostMatchers} {
-					if len(s) != 0 {
-						sr.filterMinMaxHost(ev, k, s)
-					}
-				}
-				for k := range sr.Data {
-					if !sel.OmitNameTag {
-						sr.AddTagAt(k, &SeriesTag{
-							ID:     labels.MetricName,
-							SValue: sel.MatchingMetrics[i].Name})
-					}
-					if len(sel.OriginalOffsetEx) != 0 {
-						sr.AddTagAt(k, &SeriesTag{
-							ID:    LabelOffset,
-							Value: int32(selOffset)})
-					}
-					sr.Data[k].Offset = offset
-				}
-				if qry.prefixSum {
-					sr = ev.funcPrefixSum(sr)
-				}
-				if len(res[j].Data) == 0 {
-					res[j].Meta = sr.Meta
-				}
-				res[j].appendAll(sr)
+				continue
 			}
+			if mu != nil {
+				mu.Unlock()
+				locked = false
+			}
+			sr, cancel, err := ev.QuerySeries(ev.ctx, &qry)
+			if err != nil {
+				return err
+			}
+			if mu != nil {
+				mu.Lock()
+				locked = true
+			}
+			ev.cancellationList = append(ev.cancellationList, cancel)
+			if ev.opt.Debug {
+				ev.Tracef("#%d series count %d", j, len(sr.Data))
+			}
+			for k, s := range [2][]*labels.Matcher{sel.MinHostMatchers, sel.MaxHostMatchers} {
+				if len(s) != 0 {
+					sr.filterMinMaxHost(ev, k, s)
+				}
+			}
+			for k := range sr.Data {
+				if !sel.OmitNameTag && metric != nil {
+					sr.AddTagAt(k, &SeriesTag{
+						ID:     labels.MetricName,
+						SValue: metric.Name})
+				}
+				if len(sel.OriginalOffsetEx) != 0 {
+					sr.AddTagAt(k, &SeriesTag{
+						ID:    LabelOffset,
+						Value: int32(selOffset)})
+				}
+				sr.Data[k].Offset = offset
+			}
+			if qry.prefixSum {
+				sr = ev.funcPrefixSum(sr)
+			}
+			if len(res[j].Data) == 0 {
+				res[j].Meta = sr.Meta
+			}
+			res[j].appendAll(sr)
 		}
 		return nil // success
 	}
@@ -1035,7 +1016,7 @@ func (ev *evaluator) querySeries(sel *parser.VectorSelector) (srs []Series, err 
 	return res, nil
 }
 
-func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSelector, metric *format.MetricMetaValue, selWhats []string, offset int64) (SeriesQuery, error) {
+func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSelector, selWhats []string, offset int64) (SeriesQuery, error) {
 	// whats
 	var whats []SelectorWhat
 	for _, selWhat := range selWhats {
@@ -1051,7 +1032,7 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 	var prefixSum bool
 	if len(whats) == 0 {
 		var what data_model.DigestWhat
-		if metric.Kind == format.MetricKindCounter {
+		if metric := sel.MatchingMetric(); metric != nil && metric.Kind == format.MetricKindCounter {
 			if ev.opt.Compat {
 				what = data_model.DigestCountRaw
 				prefixSum = true
@@ -1074,23 +1055,22 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 		groupBy = ev.opt.GroupBy
 	} else if sel.GroupByAll {
 		if !sel.GroupWithout {
-			for _, t := range metric.Tags {
-				if len(t.Name) != 0 {
-					addGroupBy(t)
-				}
+			for i := 0; i < format.NewMaxTags; i++ {
+				groupBy = append(groupBy, format.TagID(i))
 			}
+			groupBy = append(groupBy, format.StringTopTagID)
 		}
 	} else if sel.GroupWithout {
 		skip := make(map[int]bool)
 		for _, name := range sel.GroupBy {
-			t, ok, _ := metric.APICompatGetTag(name)
+			t, ok := sel.APICompatGetTag(name)
 			if ok {
 				skip[t.Index] = true
 			}
 		}
-		for _, t := range metric.Tags {
-			if !skip[t.Index] {
-				addGroupBy(t)
+		for i := 0; i < format.NewMaxTags; i++ {
+			if !skip[i] {
+				groupBy = append(groupBy, format.TagID(i))
 			}
 		}
 	} else if len(sel.GroupBy) != 0 {
@@ -1098,7 +1078,7 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 		for _, k := range sel.GroupBy {
 			if k == LabelShard {
 				groupBy = append(groupBy, format.ShardTagID)
-			} else if t, ok, _ := metric.APICompatGetTag(k); ok {
+			} else if t, ok := sel.APICompatGetTag(k); ok {
 				if t.Index == format.StringTopTagIndex {
 					groupBy = append(groupBy, format.StringTopTagID)
 				} else {
@@ -1109,35 +1089,31 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 	}
 	// filtering
 	var (
-		filterIn   [format.MaxTags]map[string]int32 // tag index -> tag value -> tag value ID
-		filterOut  [format.MaxTags]map[string]int32 // as above
-		sFilterIn  []string
-		sFilterOut []string
-		emptyCount [format.MaxTags + 1]int // number of "MatchEqual" or "MatchRegexp" filters which are guaranteed to yield empty response
+		emptyCount [format.NewMaxTags]int // number of "MatchEqual" or "MatchRegexp" filters which are guaranteed to yield empty response
 	)
 	for _, matcher := range sel.LabelMatchers {
 		if strings.HasPrefix(matcher.Name, "__") {
 			continue
 		}
-		tag, ok, _ := metric.APICompatGetTag(matcher.Name)
+		tag, ok := sel.APICompatGetTag(matcher.Name)
 		if !ok {
 			return SeriesQuery{}, fmt.Errorf("not found tag %q", matcher.Name)
 		}
 		if tag.Index == format.StringTopTagIndex {
 			switch matcher.Type {
 			case labels.MatchEqual:
-				sFilterIn = append(sFilterIn, matcher.Value)
+				sel.FilterIn.StringTop = append(sel.FilterIn.StringTop, matcher.Value)
 			case labels.MatchNotEqual:
-				sFilterOut = append(sFilterOut, matcher.Value)
+				sel.FilterNotIn.StringTop = append(sel.FilterNotIn.StringTop, matcher.Value)
 			case labels.MatchRegexp:
-				stop, err := ev.getStringTop(ctx, metric, offset)
+				stop, err := ev.getStringTop(ctx, sel.MatchingMetric(), offset)
 				if err != nil {
 					return SeriesQuery{}, err
 				}
 				var n int
 				for _, v := range stop {
 					if matcher.Matches(v) {
-						sFilterIn = append(sFilterIn, v)
+						sel.FilterIn.StringTop = append(sel.FilterIn.StringTop, matcher.Value)
 						n++
 					}
 				}
@@ -1147,13 +1123,13 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 					continue
 				}
 			case labels.MatchNotRegexp:
-				stop, err := ev.getStringTop(ctx, metric, offset)
+				stop, err := ev.getStringTop(ctx, sel.MatchingMetric(), offset)
 				if err != nil {
 					return SeriesQuery{}, err
 				}
 				for _, v := range stop {
 					if !matcher.Matches(v) {
-						sFilterOut = append(sFilterOut, v)
+						sel.FilterNotIn.StringTop = append(sel.FilterNotIn.StringTop, matcher.Value)
 					}
 				}
 			}
@@ -1161,16 +1137,12 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 			i := tag.Index
 			switch matcher.Type {
 			case labels.MatchEqual:
-				id, err := ev.getTagValueID(metric, i, matcher.Value)
+				id, err := ev.getTagValueID(sel.MatchingMetric(), i, matcher.Value)
 				if err != nil {
 					if errors.Is(err, ErrNotFound) {
 						if ev.opt.Version == data_model.Version3 {
 							// we allow unmapped values for v3 requests
-							if filterIn[i] != nil {
-								filterIn[i][matcher.Value] = 0
-							} else {
-								filterIn[i] = map[string]int32{matcher.Value: 0}
-							}
+							sel.FilterIn.AppendValue(i, matcher.Value)
 						} else {
 							// string is not mapped, result is guaranteed to be empty
 							emptyCount[i]++
@@ -1180,22 +1152,14 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 						return SeriesQuery{}, fmt.Errorf("failed to map string %q: %v", matcher.Value, err)
 					}
 				}
-				if filterIn[i] != nil {
-					filterIn[i][matcher.Value] = id
-				} else {
-					filterIn[i] = map[string]int32{matcher.Value: id}
-				}
+				sel.FilterIn.Append(i, data_model.TagValue{Value: matcher.Value, Mapped: id})
 			case labels.MatchNotEqual:
-				id, err := ev.getTagValueID(metric, i, matcher.Value)
+				id, err := ev.getTagValueID(sel.MatchingMetric(), i, matcher.Value)
 				if err != nil {
 					if errors.Is(err, ErrNotFound) {
 						// we allow unmapped values for v3 requests
 						if ev.opt.Version == data_model.Version3 {
-							if filterOut[i] != nil {
-								filterOut[i][matcher.Value] = 0
-							} else {
-								filterOut[i] = map[string]int32{matcher.Value: 0}
-							}
+							sel.FilterNotIn.AppendValue(i, matcher.Value)
 						} else {
 							continue // ignore values with no mapping
 						}
@@ -1203,40 +1167,34 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 						return SeriesQuery{}, err
 					}
 				}
-				if filterOut[i] != nil {
-					filterOut[i][matcher.Value] = id
-				} else {
-					filterOut[i] = map[string]int32{matcher.Value: id}
-				}
+				sel.FilterNotIn.Append(i, data_model.TagValue{Value: matcher.Value, Mapped: id})
 			case labels.MatchRegexp:
-				m, err := ev.getTagValues(ctx, metric, i, offset)
+				m, err := ev.getTagValues(ctx, sel.MatchingMetric(), i, offset)
 				if err != nil {
 					return SeriesQuery{}, err
 				}
-				in := make(map[string]int32)
-				for id, str := range m {
-					if matcher.Matches(str) {
-						in[str] = id
+				var matchCount int
+				for _, tag := range m {
+					if matcher.Matches(tag.Value) {
+						sel.FilterIn.Append(i, tag)
+						matchCount++
 					}
 				}
-				if len(in) == 0 {
+				if matchCount == 0 {
 					// there no data satisfying the filter
 					emptyCount[i]++
 					continue
 				}
-				filterIn[i] = in
 			case labels.MatchNotRegexp:
-				m, err := ev.getTagValues(ctx, metric, i, offset)
+				m, err := ev.getTagValues(ctx, sel.MatchingMetric(), i, offset)
 				if err != nil {
 					return SeriesQuery{}, err
 				}
-				out := make(map[string]int32)
-				for id, str := range m {
-					if !matcher.Matches(str) {
-						out[str] = id
+				for _, tag := range m {
+					if !matcher.Matches(tag.Value) {
+						sel.FilterNotIn.Append(i, tag)
 					}
 				}
-				filterOut[i] = out
 			}
 		}
 	}
@@ -1244,13 +1202,7 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 		if n == 0 {
 			continue
 		}
-		var m int
-		if i == format.MaxTags {
-			m = len(sFilterIn)
-		} else {
-			m = len(filterIn[i])
-		}
-		if m == 0 {
+		if m := len(sel.FilterIn.Tags[i]); m == 0 {
 			// All "MatchEqual" and "MatchRegexp" filters give an empty result and
 			// there are no other such filters, overall result is guaranteed to be empty
 			return SeriesQuery{}, nil
@@ -1268,19 +1220,17 @@ func (ev *evaluator) buildSeriesQuery(ctx context.Context, sel *parser.VectorSel
 		}
 	}
 	return SeriesQuery{
-			Metric:     metric,
-			Whats:      whats,
-			Timescale:  ev.t,
-			Offset:     offset,
-			Range:      sel.Range,
-			GroupBy:    groupBy,
-			FilterIn:   filterIn,
-			FilterOut:  filterOut,
-			SFilterIn:  sFilterIn,
-			SFilterOut: sFilterOut,
-			MinMaxHost: [2]bool{sel.MinHost, sel.MaxHost},
-			Options:    ev.opt,
-			prefixSum:  prefixSum,
+			Matcher:     sel.Matcher,
+			Whats:       whats,
+			Timescale:   ev.t,
+			Offset:      offset,
+			Range:       sel.Range,
+			GroupBy:     groupBy,
+			FilterIn:    sel.FilterIn,
+			FilterNotIn: sel.FilterNotIn,
+			MinMaxHost:  [2]bool{sel.MinHost, sel.MaxHost},
+			Options:     ev.opt,
+			prefixSum:   prefixSum,
 		},
 		nil
 }
@@ -1305,20 +1255,20 @@ func (ev *evaluator) newVector(v float64) Series {
 	return res
 }
 
-func (ev *evaluator) getTagValues(ctx context.Context, metric *format.MetricMetaValue, tagX int, offset int64) (map[int32]string, error) {
+func (ev *evaluator) getTagValues(ctx context.Context, metric *format.MetricMetaValue, tagX int, offset int64) (data_model.TagValues, error) {
 	m, ok := ev.tags[metric]
 	if !ok {
 		// tag index -> offset -> tag value ID -> tag value
-		m = make([]map[int64]map[int32]string, format.MaxTags)
+		m = make([]map[int64]data_model.TagValues, format.MaxTags)
 		ev.tags[metric] = m
 	}
 	m2 := m[tagX]
 	if m2 == nil {
 		// offset -> tag value ID -> tag value
-		m2 = make(map[int64]map[int32]string)
+		m2 = make(map[int64]data_model.TagValues)
 		m[tagX] = m2
 	}
-	var res map[int32]string
+	var res data_model.TagValues
 	if res, ok = m2[offset]; ok {
 		return res, nil
 	}
@@ -1333,7 +1283,7 @@ func (ev *evaluator) getTagValues(ctx context.Context, metric *format.MetricMeta
 		return nil, err
 	}
 	// tag value ID -> tag value
-	res = make(map[int32]string, len(ids))
+	res = make(data_model.TagValues, 0, len(ids))
 	for _, id := range ids {
 		s := ev.GetTagValue(TagValueQuery{
 			Version:    ev.opt.Version,
@@ -1344,7 +1294,7 @@ func (ev *evaluator) getTagValues(ctx context.Context, metric *format.MetricMeta
 		if s == " 0" {
 			s = ""
 		}
-		res[id] = s
+		res[id] = data_model.TagValue{Value: s, Mapped: id}
 	}
 	m2[offset] = res
 	return res, nil
@@ -1609,7 +1559,7 @@ func (ev *evaluator) reportStat(qry Query, timeEnd time.Time) {
 }
 
 func (qry *SeriesQuery) empty() bool {
-	return qry.Metric == nil
+	return qry.FilterIn.Metrics.Empty() && qry.FilterNotIn.Metrics.Empty()
 }
 
 func evalLiteral(expr parser.Expr) (*parser.NumberLiteral, bool) {

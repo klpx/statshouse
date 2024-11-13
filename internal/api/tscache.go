@@ -177,7 +177,7 @@ func (g *tsCacheGroup) Get(ctx context.Context, h *requestHandler, key string, p
 		return nil, err
 	}
 	res := make([][]tsSelectRow, x)
-	switch pq.metricID {
+	switch pq.metricID() {
 	case format.BuiltinMetricIDGeneratorConstCounter:
 		generateConstCounter(lod, res)
 	case format.BuiltinMetricIDGeneratorSinCounter:
@@ -264,7 +264,7 @@ func (c *tsCache) get(ctx context.Context, h *requestHandler, key string, pq *pr
 	if !avoidCache {
 		realLoadFrom, realLoadTo = c.loadCached(h, key, lod.FromSec, lod.ToSec, ret, 0, lod.Location, &cachedRows)
 		if realLoadFrom == 0 && realLoadTo == 0 {
-			ChCacheRate(cachedRows, 0, pq.metricID, lod.Table, pq.kind.String())
+			ChCacheRate(cachedRows, 0, pq.metricID(), lod.Table, pq.kind.String())
 			return ret, nil
 		}
 	}
@@ -276,7 +276,7 @@ func (c *tsCache) get(ctx context.Context, h *requestHandler, key string, pq *pr
 		return nil, err
 	}
 
-	ChCacheRate(cachedRows, chRows, pq.metricID, lod.Table, pq.kind.String())
+	ChCacheRate(cachedRows, chRows, pq.metricID(), lod.Table, pq.kind.String())
 
 	if avoidCache {
 		return ret, nil

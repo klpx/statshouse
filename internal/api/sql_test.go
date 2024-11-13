@@ -41,12 +41,12 @@ func getLod(t *testing.T, version string) data_model.LOD {
 func TestTagValuesQueryV2(t *testing.T) {
 	// prepare
 	pq := &preparedTagValuesQuery{
-		metricID:    metricID,
-		tagID:       "2",
-		numResults:  5,
-		filterIn:    map[string][]any{"1": {"one", "two"}},
-		filterNotIn: map[string][]any{"0": {"staging"}},
+		filterIn:   data_model.MetricIDFilter(metricID),
+		tagID:      "2",
+		numResults: 5,
 	}
+	pq.filterIn.AppendMapped(1, 1, 2)
+	pq.filterNotIn.AppendMapped(0, 3)
 	lod := getLod(t, Version2)
 
 	// execute
@@ -61,10 +61,10 @@ SELECT
 FROM
   statshouse_value_1m_dist
 WHERE
-  metric = 1000
+  metric IN (1000)
   AND time >= 9957 AND time < 20037
-  AND key1 IN ('one', 'two')
-  AND key0 NOT IN ('staging')
+  AND key1 IN (1, 2)
+  AND key0 NOT IN (3)
 GROUP BY
   key2
 HAVING _count > 0
@@ -80,12 +80,12 @@ SETTINGS
 func TestTagValuesQueryV2_stringTop(t *testing.T) {
 	// prepare
 	pq := &preparedTagValuesQuery{
-		metricID:    metricID,
-		tagID:       format.StringTopTagID,
-		numResults:  5,
-		filterIn:    map[string][]any{"1": {"one", "two"}},
-		filterNotIn: map[string][]any{"0": {"staging"}},
+		filterIn:   data_model.MetricIDFilter(metricID),
+		tagID:      format.StringTopTagID,
+		numResults: 5,
 	}
+	pq.filterIn.AppendMapped(1, 1, 2)
+	pq.filterNotIn.AppendMapped(0, 3)
 	lod := getLod(t, Version2)
 
 	// execute
@@ -100,10 +100,10 @@ SELECT
 FROM
   statshouse_value_1m_dist
 WHERE
-  metric = 1000
+  metric IN (1000)
   AND time >= 9957 AND time < 20037
-  AND key1 IN ('one', 'two')
-  AND key0 NOT IN ('staging')
+  AND key1 IN (1, 2)
+  AND key0 NOT IN (3)
 GROUP BY
   skey
 HAVING _count > 0
@@ -119,14 +119,12 @@ SETTINGS
 func TestTagValuesQueryV3(t *testing.T) {
 	// prepare
 	pq := &preparedTagValuesQuery{
-		metricID:      metricID,
-		tagID:         "2",
-		numResults:    5,
-		filterIn:      map[string][]any{"1": {"one", "two"}},
-		filterNotIn:   map[string][]any{"0": {"staging"}},
-		filterInV3:    map[string][]maybeMappedTag{"1": {{"one", 1}, {"two", 2}}},
-		filterNotInV3: map[string][]maybeMappedTag{"0": {{"staging", 0}}},
+		filterIn:   data_model.MetricIDFilter(metricID),
+		tagID:      "2",
+		numResults: 5,
 	}
+	pq.filterIn.Append(1, data_model.TagValue{Value: "one", Mapped: 1}, data_model.TagValue{Value: "two", Mapped: 2})
+	pq.filterNotIn.AppendValue(0, "staging")
 	lod := getLod(t, Version3)
 
 	// execute
@@ -139,7 +137,7 @@ func TestTagValuesQueryV3(t *testing.T) {
 	assert.Equal(t, `
 SELECT tag2 AS _mapped, stag2 AS _unmapped, toFloat64(sum(count)) AS _count
 FROM statshouse_v3_1m_dist
-WHERE metric = 1000
+WHERE metric IN (1000)
   AND time >= 9957 AND time < 20037
   AND (tag1 IN (1, 2) OR stag1 IN ('one', 'two'))
   AND (tag0 NOT IN (0) AND stag0 NOT IN ('staging'))
@@ -155,13 +153,13 @@ SETTINGS optimize_aggregation_in_order = 1
 func TestLoadPointsQueryV2(t *testing.T) {
 	// prepare
 	pq := &preparedPointsQuery{
+		filterIn:    data_model.MetricIDFilter(metricID),
 		user:        "test-user",
-		metricID:    metricID,
 		isStringTop: false,
 		kind:        data_model.DigestCountSec.Kind(false),
-		filterIn:    map[string][]any{"1": {"one", "two"}},
-		filterNotIn: map[string][]any{"0": {"staging"}},
 	}
+	pq.filterIn.AppendMapped(1, 1, 2)
+	pq.filterNotIn.AppendMapped(0, 3)
 	lod := getLod(t, Version2)
 
 	// execute
@@ -184,10 +182,10 @@ toInt64(60) AS _stepSec,
 FROM
   statshouse_value_1m_dist
 WHERE
-  metric = 1000
+  metric IN (1000)
   AND time >= 9957 AND time < 20037
-  AND key1 IN ('one', 'two')
-  AND key0 NOT IN ('staging')
+  AND key1 IN (1, 2)
+  AND key0 NOT IN (3)
 GROUP BY
   _time
 LIMIT 10000000
@@ -199,13 +197,13 @@ SETTINGS
 func TestLoadPointsQueryV2_maxHost(t *testing.T) {
 	// prepare
 	pq := &preparedPointsQuery{
+		filterIn:    data_model.MetricIDFilter(metricID),
 		user:        "test-user",
-		metricID:    metricID,
 		isStringTop: false,
 		kind:        data_model.DigestCountSec.Kind(true),
-		filterIn:    map[string][]any{"1": {"one", "two"}},
-		filterNotIn: map[string][]any{"0": {"staging"}},
 	}
+	pq.filterIn.AppendMapped(1, 1, 2)
+	pq.filterNotIn.AppendMapped(0, 3)
 	lod := getLod(t, Version2)
 
 	// execute
@@ -233,10 +231,10 @@ toInt64(60) AS _stepSec,
 FROM
   statshouse_value_1m_dist
 WHERE
-  metric = 1000
+  metric IN (1000)
   AND time >= 9957 AND time < 20037
-  AND key1 IN ('one', 'two')
-  AND key0 NOT IN ('staging')
+  AND key1 IN (1, 2)
+  AND key0 NOT IN (3)
 GROUP BY
   _time
 LIMIT 10000000
@@ -248,15 +246,13 @@ SETTINGS
 func TestLoadPointsQueryV3(t *testing.T) {
 	// prepare
 	pq := &preparedPointsQuery{
-		user:          "test-user",
-		metricID:      metricID,
-		isStringTop:   false,
-		kind:          data_model.DigestCountSec.Kind(false),
-		filterIn:      map[string][]any{"1": {"one", "two"}},
-		filterNotIn:   map[string][]any{"0": {"staging"}},
-		filterInV3:    map[string][]maybeMappedTag{"1": {{"one", 1}, {"two", 2}}},
-		filterNotInV3: map[string][]maybeMappedTag{"0": {{"staging", 0}}},
+		filterIn:    data_model.MetricIDFilter(metricID),
+		user:        "test-user",
+		isStringTop: false,
+		kind:        data_model.DigestCountSec.Kind(false),
 	}
+	pq.filterIn.Append(1, data_model.TagValue{Value: "one", Mapped: 1}, data_model.TagValue{Value: "two", Mapped: 2})
+	pq.filterNotIn.AppendValue(0, "staging")
 	lod := getLod(t, Version3)
 
 	// execute
@@ -275,7 +271,7 @@ func TestLoadPointsQueryV3(t *testing.T) {
   toFloat64(sum(1)) AS _val0,
   toFloat64(max(max)) AS _val1
 FROM statshouse_v3_1m_dist
-WHERE index_type = 0 AND metric = 1000 AND time >= 9957 AND time < 20037  AND (tag1 IN (1, 2) OR stag1 IN ('one', 'two'))
+WHERE index_type = 0 AND metric IN (1000) AND time >= 9957 AND time < 20037  AND (tag1 IN (1, 2) OR stag1 IN ('one', 'two'))
   AND (tag0 NOT IN (0) AND stag0 NOT IN ('staging'))
 
 GROUP BY _time
@@ -286,15 +282,13 @@ SETTINGS optimize_aggregation_in_order = 1`, query)
 func TestLoadPointsQueryV3_maxHost(t *testing.T) {
 	// prepare
 	pq := &preparedPointsQuery{
-		user:          "test-user",
-		metricID:      metricID,
-		isStringTop:   false,
-		kind:          data_model.DigestCountSec.Kind(true),
-		filterIn:      map[string][]any{"1": {"one", "two"}},
-		filterNotIn:   map[string][]any{"0": {"staging"}},
-		filterInV3:    map[string][]maybeMappedTag{"1": {{"one", 1}, {"two", 2}}},
-		filterNotInV3: map[string][]maybeMappedTag{"0": {{"staging", 0}}},
+		filterIn:    data_model.MetricIDFilter(metricID),
+		user:        "test-user",
+		isStringTop: false,
+		kind:        data_model.DigestCountSec.Kind(true),
 	}
+	pq.filterIn.Append(1, data_model.TagValue{Value: "one", Mapped: 1}, data_model.TagValue{Value: "two", Mapped: 2})
+	pq.filterNotIn.AppendValue(0, "staging")
 	lod := getLod(t, Version3)
 
 	// execute
@@ -318,7 +312,7 @@ func TestLoadPointsQueryV3_maxHost(t *testing.T) {
   toFloat64(sum(1)) AS _val5,
   argMinMerge(min_host) as _minHost, argMaxMerge(max_host) as _maxHost
 FROM statshouse_v3_1m_dist
-WHERE index_type = 0 AND metric = 1000 AND time >= 9957 AND time < 20037  AND (tag1 IN (1, 2) OR stag1 IN ('one', 'two'))
+WHERE index_type = 0 AND metric IN (1000) AND time >= 9957 AND time < 20037  AND (tag1 IN (1, 2) OR stag1 IN ('one', 'two'))
   AND (tag0 NOT IN (0) AND stag0 NOT IN ('staging'))
 
 GROUP BY _time

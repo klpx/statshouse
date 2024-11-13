@@ -54,7 +54,7 @@ var NilValue = math.Float64frombits(NilValueBits)
 
 type SeriesQuery struct {
 	// What
-	Metric     *format.MetricMetaValue
+	Matcher    *labels.Matcher
 	Whats      []SelectorWhat
 	GroupBy    []string
 	MinMaxHost [2]bool // "min" at [0], "max" at [1]
@@ -64,10 +64,8 @@ type SeriesQuery struct {
 	Offset    int64
 
 	// Filtering
-	FilterIn   [format.MaxTags]map[string]int32 // tag index -> tag value -> tag value ID
-	FilterOut  [format.MaxTags]map[string]int32 // as above
-	SFilterIn  []string
-	SFilterOut []string
+	FilterIn    data_model.TagFilters
+	FilterNotIn data_model.TagFilters
 
 	// Transformations
 	Range     int64
@@ -117,7 +115,7 @@ type Handler interface {
 	// # Metric Metadata
 	//
 
-	MatchMetrics(ctx context.Context, matcher *labels.Matcher, namespace string) ([]*format.MetricMetaValue, error)
+	MatchMetrics(matcher *labels.Matcher, namespace string) (data_model.QueryFilter, error)
 
 	//
 	// # Storage
@@ -140,6 +138,15 @@ type Handler interface {
 
 	Tracef(format string, a ...any)
 }
+
+func (qry *SeriesQuery) Metric() *format.MetricMetaValue {
+	if qry.FilterIn.Metrics.Head != nil {
+		return qry.FilterIn.Metrics.Head
+	}
+	return &nilMetric
+}
+
+var nilMetric format.MetricMetaValue
 
 // Used by 'Handler' implementation to signal that entity requested was just not found
 var ErrNotFound = fmt.Errorf("not found")

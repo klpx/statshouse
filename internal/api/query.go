@@ -404,25 +404,12 @@ func normalizedQueryString(
 	metricName string,
 	kind data_model.DigestKind,
 	by []string,
-	filterIn map[string][]string,
-	filterNoIn map[string][]string,
+	filterIn data_model.TagFilters,
+	filterNoIn data_model.TagFilters,
 	orderBy bool,
 ) string {
 	sortedBy := append([]string(nil), by...)
 	sort.Strings(sortedBy)
-
-	var sortedFilter []string
-	for k, vv := range filterIn {
-		for _, v := range vv {
-			sortedFilter = append(sortedFilter, k+queryFilterInSep+v)
-		}
-	}
-	for k, vv := range filterNoIn {
-		for _, v := range vv {
-			sortedFilter = append(sortedFilter, k+queryFilterNotInSep+v)
-		}
-	}
-	sort.Strings(sortedFilter)
 
 	var buf strings.Builder
 	buf.WriteString(ParamMetric)
@@ -438,11 +425,25 @@ func normalizedQueryString(
 		buf.WriteByte('=')
 		buf.WriteString(url.QueryEscape(b))
 	}
-	for _, f := range sortedFilter {
-		buf.WriteByte('&')
-		buf.WriteString(ParamQueryFilter)
-		buf.WriteByte('=')
-		buf.WriteString(url.QueryEscape(f))
+	for i, tf := range filterIn.Tags {
+		for _, f := range tf {
+			buf.WriteByte('&')
+			buf.WriteString(ParamQueryFilter)
+			buf.WriteByte('=')
+			buf.WriteString(format.TagID(i))
+			buf.WriteString(queryFilterInSep)
+			buf.WriteString(f.String())
+		}
+	}
+	for i, tf := range filterNoIn.Tags {
+		for _, f := range tf {
+			buf.WriteByte('&')
+			buf.WriteString(ParamQueryFilter)
+			buf.WriteByte('=')
+			buf.WriteString(format.TagID(i))
+			buf.WriteString(queryFilterNotInSep)
+			buf.WriteString(f.String())
+		}
 	}
 
 	if orderBy {

@@ -1039,46 +1039,22 @@ func formValueParamMetric(r *http.Request) string {
 	return mergeMetricNamespace(ns, str)
 }
 
-func (h *requestHandler) resolveFilter(metricMeta *format.MetricMetaValue, version string, f map[string][]string) (map[string][]interface{}, error) {
-	m := make(map[string][]interface{}, len(f))
+func (h *requestHandler) resolveFilter(metricMeta *format.MetricMetaValue, version string, f map[string][]string) (data_model.TagFilters, error) {
+	var m data_model.TagFilters
 	for k, values := range f {
 		if version == Version1 && k == format.EnvTagID {
 			continue // we only support production tables for v1
 		}
 		if k == format.StringTopTagID {
 			for _, val := range values {
-				m[k] = append(m[k], unspecifiedToEmpty(val))
+				m.StringTop = append(m.StringTop, unspecifiedToEmpty(val))
 			}
 		} else {
 			ids, err := h.getRichTagValueIDs(metricMeta, version, k, values)
 			if err != nil {
-				return nil, err
+				return data_model.TagFilters{}, err
 			}
-			m[k] = []interface{}{}
-			for _, id := range ids {
-				m[k] = append(m[k], id)
-			}
-		}
-	}
-	return m, nil
-}
-
-func (h *requestHandler) resolveFilterV3(metricMeta *format.MetricMetaValue, f map[string][]string) (map[string][]maybeMappedTag, error) {
-	m := make(map[string][]maybeMappedTag, len(f))
-	for k, values := range f {
-		if k == format.StringTopTagID {
-			for _, val := range values {
-				m[k] = append(m[k], maybeMappedTag{Value: unspecifiedToEmpty(val)})
-			}
-		} else {
-			ids, err := h.getRichTagValueIDs(metricMeta, Version3, k, values)
-			if err != nil {
-				return nil, err
-			}
-			m[k] = []maybeMappedTag{}
-			for i := range ids {
-				m[k] = append(m[k], maybeMappedTag{values[i], ids[i]})
-			}
+			m.AppendMapped(metricMeta.Name2Tag[k].Index, ids...)
 		}
 	}
 	return m, nil
@@ -1824,21 +1800,10 @@ func (h *requestHandler) handleGetMetricTagValues(ctx context.Context, req getMe
 	if err != nil {
 		return nil, false, err
 	}
+	mappedFilterIn.Metrics.Head = metricMeta
 	mappedFilterNotIn, err := h.resolveFilter(metricMeta, version, filterNotIn)
 	if err != nil {
 		return nil, false, err
-	}
-	var filterInV3 map[string][]maybeMappedTag
-	var filterNotInV3 map[string][]maybeMappedTag
-	if version == Version3 {
-		filterInV3, err = h.resolveFilterV3(metricMeta, filterIn)
-		if err != nil {
-			return nil, false, err
-		}
-		filterNotInV3, err = h.resolveFilterV3(metricMeta, filterNotIn)
-		if err != nil {
-			return nil, false, err
-		}
 	}
 
 	lods, err := data_model.GetLODs(data_model.GetTimescaleArgs{
@@ -1857,14 +1822,12 @@ func (h *requestHandler) handleGetMetricTagValues(ctx context.Context, req getMe
 	}
 
 	pq := &preparedTagValuesQuery{
-		metricID:      metricMeta.MetricID,
-		preKeyTagID:   metricMeta.PreKeyTagID,
-		tagID:         tagID,
-		numResults:    numResults,
-		filterIn:      mappedFilterIn,
-		filterNotIn:   mappedFilterNotIn,
-		filterInV3:    filterInV3,
-		filterNotInV3: filterNotInV3,
+		preKeyTagX:  format.TagIndex(metricMeta.PreKeyTagID),
+		preKeyTagID: metricMeta.PreKeyTagID,
+		tagID:       tagID,
+		numResults:  numResults,
+		filterIn:    mappedFilterIn,
+		filterNotIn: mappedFilterNotIn,
 	}
 
 	tagInfo := map[selectRow]float64{}
@@ -2297,6 +2260,7 @@ func (h *requestHandler) handleGetTable(ctx context.Context, req seriesRequest) 
 	if err != nil {
 		return nil, false, err
 	}
+	mappedFilterIn.Metrics.Head = metricMeta
 	mappedFilterNotIn, err := h.resolveFilter(metricMeta, req.version, req.filterNotIn)
 	if err != nil {
 		return nil, false, err
@@ -2931,13 +2895,13 @@ func loadPoints(ctx context.Context, h *requestHandler, pq *preparedPointsQuery,
 	isFast := lod.IsFast()
 	isLight := pq.isLight()
 	IsHardware := pq.IsHardware()
-	metric := pq.metricID
+	metric := pq.metricID()
 	table := lod.Table
 	kind := pq.kind
 	var metricName string
-	if m, ok := format.BuiltinMetrics[pq.metricID]; ok {
+	if m, ok := format.BuiltinMetrics[metric]; ok {
 		metricName = m.Name
-	} else if m := h.metricsStorage.GetMetaMetric(pq.metricID); m != nil {
+	} else if m := h.metricsStorage.GetMetaMetric(metric); m != nil {
 		metricName = m.Name
 	}
 	start := time.Now()
@@ -3011,7 +2975,7 @@ func loadPoints(ctx context.Context, h *requestHandler, pq *preparedPointsQuery,
 }
 
 func loadPoint(ctx context.Context, h *requestHandler, pq *preparedPointsQuery, lod data_model.LOD) ([]pSelectRow, error) {
-	query, args, err := loadPointQuery(pq, lod, h.utcOffset)
+	query, args, err := loadPointQuery(pq, lod)
 	if err != nil {
 		return nil, err
 	}
@@ -3021,7 +2985,7 @@ func loadPoint(ctx context.Context, h *requestHandler, pq *preparedPointsQuery, 
 	isFast := lod.IsFast()
 	isLight := pq.isLight()
 	isHardware := pq.IsHardware()
-	metric := pq.metricID
+	metric := pq.metricID()
 	table := lod.Table
 	kind := pq.kind
 	err = h.doSelect(ctx, util.QueryMetaInto{

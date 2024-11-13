@@ -348,12 +348,10 @@ func promRespondError(w http.ResponseWriter, typ promErrorType, err error) {
 
 // endregion
 
-func (h *requestHandler) MatchMetrics(ctx context.Context, matcher *labels.Matcher, namespace string) ([]*format.MetricMetaValue, error) {
-	res := h.metricsStorage.MatchMetrics(matcher, namespace, h.showInvisible, nil)
-	for _, metric := range res {
-		if !h.accessInfo.CanViewMetric(*metric) {
-			return nil, httpErr(http.StatusForbidden, fmt.Errorf("metric %q forbidden", metric.Name))
-		}
+func (h *requestHandler) MatchMetrics(matcher *labels.Matcher, namespace string) (data_model.QueryFilter, error) {
+	res, ok := h.metricsStorage.MatchMetrics(h.accessInfo.CanViewMetric, matcher, namespace, h.showInvisible)
+	if !ok {
+		return data_model.QueryFilter{}, httpErr(http.StatusForbidden, nil)
 	}
 	return res, nil
 }
@@ -388,9 +386,6 @@ func (h *requestHandler) GetTagValueID(qry promql.TagValueIDQuery) (int32, error
 }
 
 func (h *requestHandler) QuerySeries(ctx context.Context, qry *promql.SeriesQuery) (promql.Series, func(), error) {
-	if !h.accessInfo.CanViewMetricName(qry.Metric.Name) {
-		return promql.Series{}, func() {}, httpErr(http.StatusForbidden, fmt.Errorf("metric %q forbidden", qry.Metric.Name))
-	}
 	if qry.Options.Mode == data_model.PointQuery {
 		for _, what := range qry.Whats {
 			switch what.Digest {
@@ -410,7 +405,7 @@ func (h *requestHandler) QuerySeries(ctx context.Context, qry *promql.SeriesQuer
 	} else {
 		step = qry.Timescale.Step
 	}
-	res := promql.Series{Meta: promql.SeriesMeta{Metric: qry.Metric}}
+	res := promql.Series{Meta: promql.SeriesMeta{Metric: qry.Metric()}}
 	if len(qry.Whats) == 1 {
 		switch qry.Whats[0].Digest {
 		case data_model.DigestCount, data_model.DigestCountSec, data_model.DigestCountRaw,
@@ -418,14 +413,14 @@ func (h *requestHandler) QuerySeries(ctx context.Context, qry *promql.SeriesQuer
 			data_model.DigestCardinalityRaw, data_model.DigestUnique, data_model.DigestUniqueSec:
 			// measure units does not apply to counters
 		default:
-			res.Meta.Units = qry.Metric.MetricType
+			res.Meta.Units = qry.Metric().MetricType
 		}
 	}
 	var lods []data_model.LOD
 	if qry.Options.Mode == data_model.PointQuery {
 		lod0 := qry.Timescale.LODs[0]
 		start := qry.Timescale.Time[0]
-		metric := qry.Metric
+		metric := qry.Metric()
 		lods = []data_model.LOD{{
 			FromSec:    qry.Timescale.Time[0] - qry.Offset,
 			ToSec:      qry.Timescale.Time[1] - qry.Offset,
@@ -436,7 +431,7 @@ func (h *requestHandler) QuerySeries(ctx context.Context, qry *promql.SeriesQuer
 			Location:   h.location,
 		}}
 	} else {
-		lods = qry.Timescale.GetLODs(qry.Metric, qry.Offset)
+		lods = qry.Timescale.GetLODs(qry.Metric(), qry.Offset)
 	}
 	tagX := make(map[tsTags]int, len(qry.GroupBy))
 	var buffers []*[]float64
@@ -581,24 +576,24 @@ func (h *requestHandler) QuerySeries(ctx context.Context, qry *promql.SeriesQuer
 			for v, j := range tagX {
 				for _, groupBy := range qry.GroupBy {
 					switch groupBy {
-					case format.StringTopTagID, qry.Metric.StringTopName:
+					case format.StringTopTagID, qry.Metric().StringTopName:
 						res.AddTagAt(i+j, &promql.SeriesTag{
-							Metric: qry.Metric,
+							Metric: qry.Metric(),
 							Index:  format.StringTopTagIndex + promql.SeriesTagIndexOffset,
 							ID:     format.StringTopTagID,
-							Name:   qry.Metric.StringTopName,
+							Name:   qry.Metric().StringTopName,
 							SValue: emptyToUnspecified(v.tagStr.String()),
 						})
 					case format.ShardTagID:
 						res.AddTagAt(i+j, &promql.SeriesTag{
-							Metric: qry.Metric,
+							Metric: qry.Metric(),
 							ID:     promql.LabelShard,
 							Value:  int32(v.shardNum),
 						})
 					default:
-						if m, ok := qry.Metric.Name2Tag[groupBy]; ok && m.Index < len(v.tag) {
+						if m, ok := qry.Metric().Name2Tag[groupBy]; ok && m.Index < len(v.tag) {
 							st := &promql.SeriesTag{
-								Metric: qry.Metric,
+								Metric: qry.Metric(),
 								Index:  m.Index + promql.SeriesTagIndexOffset,
 								ID:     format.TagID(m.Index),
 								Name:   m.Name,
@@ -632,7 +627,8 @@ func (h *requestHandler) QuerySeries(ctx context.Context, qry *promql.SeriesQuer
 func (h *requestHandler) QueryTagValueIDs(ctx context.Context, qry promql.TagValuesQuery) ([]int32, error) {
 	var (
 		pq = &preparedTagValuesQuery{
-			metricID:    qry.Metric.MetricID,
+			filterIn:    data_model.MetricFilter(qry.Metric),
+			preKeyTagX:  format.TagIndex(qry.Metric.PreKeyTagID),
 			preKeyTagID: qry.Metric.PreKeyTagID,
 			tagID:       format.TagID(qry.TagIndex),
 			numResults:  math.MaxInt - 1,
@@ -676,7 +672,8 @@ func (h *requestHandler) QueryTagValueIDs(ctx context.Context, qry promql.TagVal
 func (h *requestHandler) QueryStringTop(ctx context.Context, qry promql.TagValuesQuery) ([]string, error) {
 	var (
 		pq = &preparedTagValuesQuery{
-			metricID:    qry.Metric.MetricID,
+			filterIn:    data_model.MetricFilter(qry.Metric),
+			preKeyTagX:  format.TagIndex(qry.Metric.PreKeyTagID),
 			preKeyTagID: qry.Metric.PreKeyTagID,
 			tagID:       format.StringTopTagID,
 			numResults:  math.MaxInt - 1,
@@ -735,49 +732,6 @@ type handlerWhat struct {
 }
 
 func (h *requestHandler) getHandlerArgs(qry *promql.SeriesQuery, step int64) map[data_model.DigestKind]handlerArgs {
-	// filtering
-	var (
-		filterIn   = make(map[string][]string)
-		filterInM  = make(map[string][]any) // mapped
-		filterInV3 = make(map[string][]maybeMappedTag)
-	)
-	for i, m := range qry.FilterIn {
-		if i == 0 && qry.Options.Version == Version1 {
-			continue
-		}
-		tagName := format.TagID(i)
-		for tagValue, tagValueID := range m {
-			filterIn[tagName] = append(filterIn[tagName], tagValue)
-			filterInM[tagName] = append(filterInM[tagName], tagValueID)
-			filterInV3[tagName] = append(filterInV3[tagName], maybeMappedTag{tagValue, tagValueID})
-		}
-	}
-	for _, tagValue := range qry.SFilterIn {
-		filterIn[format.StringTopTagID] = append(filterIn[format.StringTopTagID], promqlEncodeSTagValue(tagValue))
-		filterInM[format.StringTopTagID] = append(filterInM[format.StringTopTagID], tagValue)
-		filterInV3[format.StringTopTagID] = append(filterInV3[format.StringTopTagID], maybeMappedTag{Value: tagValue})
-	}
-	var (
-		filterOut   = make(map[string][]string)
-		filterOutM  = make(map[string][]any) // mapped
-		filterOutV3 = make(map[string][]maybeMappedTag)
-	)
-	for i, m := range qry.FilterOut {
-		if i == 0 && qry.Options.Version == Version1 {
-			continue
-		}
-		tagID := format.TagID(i)
-		for tagValue, tagValueID := range m {
-			filterOut[tagID] = append(filterOut[tagID], tagValue)
-			filterOutM[tagID] = append(filterOutM[tagID], tagValueID)
-			filterOutV3[tagID] = append(filterOutV3[tagID], maybeMappedTag{tagValue, tagValueID})
-		}
-	}
-	for _, tagValue := range qry.SFilterOut {
-		filterOut[format.StringTopTagID] = append(filterOut[format.StringTopTagID], promqlEncodeSTagValue(tagValue))
-		filterOutM[format.StringTopTagID] = append(filterOutM[format.StringTopTagID], tagValue)
-		filterOutV3[format.StringTopTagID] = append(filterOutV3[format.StringTopTagID], maybeMappedTag{Value: tagValue})
-	}
 	// grouping
 	var groupBy []string
 	switch qry.Options.Version {
@@ -826,19 +780,18 @@ func (h *requestHandler) getHandlerArgs(qry *promql.SeriesQuery, step int64) map
 		}
 	}
 	// cache key & query
+	preKeyTagID := qry.Metric().PreKeyTagID
 	for kind, args := range res {
-		// TODO switch to v3 filters, for now we always use v2
-		args.qs = normalizedQueryString(qry.Metric.Name, kind, groupBy, filterIn, filterOut, false)
+		metricName := fmt.Sprintf("%s%s", qry.Matcher.Type, qry.Matcher.Value)
+		args.qs = normalizedQueryString(metricName, kind, groupBy, qry.FilterIn, qry.FilterNotIn, false)
 		args.pq = preparedPointsQuery{
-			user:          h.accessInfo.user,
-			metricID:      qry.Metric.MetricID,
-			preKeyTagID:   qry.Metric.PreKeyTagID,
-			kind:          kind,
-			by:            qry.GroupBy,
-			filterIn:      filterInM,
-			filterNotIn:   filterOutM,
-			filterInV3:    filterInV3,
-			filterNotInV3: filterOutV3,
+			user:        h.accessInfo.user,
+			preKeyTagX:  format.TagIndex(preKeyTagID),
+			preKeyTagID: preKeyTagID,
+			kind:        kind,
+			by:          qry.GroupBy,
+			filterIn:    qry.FilterIn,
+			filterNotIn: qry.FilterNotIn,
 		}
 		res[kind] = args
 	}
@@ -856,7 +809,7 @@ func (h *Handler) Free(s *[]float64) {
 	h.putFloatsSlice(s)
 }
 
-func (h *Handler) getPromQuery(req seriesRequest) (string, error) {
+func (h *requestHandler) getPromQuery(req seriesRequest) (string, error) {
 	if len(req.promQL) != 0 {
 		return req.promQL, nil
 	}
@@ -878,11 +831,14 @@ func (h *Handler) getPromQuery(req seriesRequest) (string, error) {
 	}
 	// filtering and grouping
 	var filterGroupBy []string
-	var m [1]*format.MetricMetaValue
 	matcher := labels.Matcher{Type: labels.MatchEqual, Value: req.metricName}
-	copy(m[:], h.metricsStorage.MatchMetrics(&matcher, "", h.showInvisible, m[:0]))
+	filter, err := h.MatchMetrics(&matcher, "")
+	if err != nil {
+		return "", err
+	}
+	m := filter.FilterIn.Metrics.Head
 	if len(req.by) != 0 {
-		by, err := promqlGetBy(req.by, m[0])
+		by, err := promqlGetBy(req.by, m)
 		if err != nil {
 			return "", err
 		}
@@ -894,8 +850,8 @@ func (h *Handler) getPromQuery(req seriesRequest) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			tid = promqlTagName(tid, m[0])
-			filterGroupBy = append(filterGroupBy, fmt.Sprintf("%s=%q", tid, promqlGetFilterValue(tid, v, m[0])))
+			tid = promqlTagName(tid, m)
+			filterGroupBy = append(filterGroupBy, fmt.Sprintf("%s=%q", tid, promqlGetFilterValue(tid, v, m)))
 		}
 	}
 	for t, out := range req.filterNotIn {
@@ -904,8 +860,8 @@ func (h *Handler) getPromQuery(req seriesRequest) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			tid = promqlTagName(tid, m[0])
-			filterGroupBy = append(filterGroupBy, fmt.Sprintf("%s!=%q", tid, promqlGetFilterValue(tid, v, m[0])))
+			tid = promqlTagName(tid, m)
+			filterGroupBy = append(filterGroupBy, fmt.Sprintf("%s!=%q", tid, promqlGetFilterValue(tid, v, m)))
 		}
 	}
 	// generate resulting string
@@ -1006,13 +962,6 @@ func promqlGetFilterValue(tagID string, s string, m *format.MetricMetaValue) str
 				return v
 			}
 		}
-	}
-	return s
-}
-
-func promqlEncodeSTagValue(s string) string {
-	if s == "" {
-		return format.TagValueCodeZero
 	}
 	return s
 }

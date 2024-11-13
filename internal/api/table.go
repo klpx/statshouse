@@ -16,8 +16,8 @@ type (
 		user              string
 		metricMeta        *format.MetricMetaValue
 		isStringTop       bool
-		mappedFilterIn    map[string][]interface{}
-		mappedFilterNotIn map[string][]interface{}
+		mappedFilterIn    data_model.TagFilters
+		mappedFilterNotIn data_model.TagFilters
 		rawValue          bool
 		desiredStepMul    int64
 		location          *time.Location
@@ -51,10 +51,11 @@ func (h *requestHandler) getTableFromLODs(ctx context.Context, lods []data_model
 	for qIndex, q := range tableReqParams.req.what {
 		rowsCount := 0
 		kind := q.What.Kind(req.maxHost)
-		qs := normalizedQueryString(req.metricName, kind, req.by, req.filterIn, req.filterNotIn, true)
+		qs := normalizedQueryString(req.metricName, kind, req.by, tableReqParams.mappedFilterIn, tableReqParams.mappedFilterNotIn, true)
+
 		pq := &preparedPointsQuery{
 			user:        tableReqParams.user,
-			metricID:    metricMeta.MetricID,
+			preKeyTagX:  format.TagIndex(metricMeta.PreKeyTagID),
 			preKeyTagID: metricMeta.PreKeyTagID,
 			isStringTop: tableReqParams.isStringTop,
 			kind:        kind,

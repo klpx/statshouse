@@ -17,21 +17,13 @@ import (
 	"github.com/vkcom/statshouse/internal/util"
 )
 
-type maybeMappedTag struct {
-	Value  string
-	Mapped int32
-}
-
 type preparedTagValuesQuery struct {
-	metricID    int32
+	preKeyTagX  int
 	preKeyTagID string
 	tagID       string
 	numResults  int
-	filterIn    map[string][]interface{}
-	filterNotIn map[string][]interface{}
-
-	filterInV3    map[string][]maybeMappedTag
-	filterNotInV3 map[string][]maybeMappedTag
+	filterIn    data_model.TagFilters
+	filterNotIn data_model.TagFilters
 }
 
 func (q *preparedTagValuesQuery) stringTag() bool {
@@ -40,16 +32,13 @@ func (q *preparedTagValuesQuery) stringTag() bool {
 
 type preparedPointsQuery struct {
 	user        string
-	metricID    int32
+	preKeyTagX  int
 	preKeyTagID string
 	isStringTop bool
 	kind        data_model.DigestKind
 	by          []string
-	filterIn    map[string][]interface{}
-	filterNotIn map[string][]interface{}
-
-	filterInV3    map[string][]maybeMappedTag
-	filterNotInV3 map[string][]maybeMappedTag
+	filterIn    data_model.TagFilters
+	filterNotIn data_model.TagFilters
 
 	// for table view requests
 	orderBy bool
@@ -67,7 +56,14 @@ func (pq *preparedPointsQuery) isLight() bool {
 }
 
 func (pq *preparedPointsQuery) IsHardware() bool {
-	return format.HardwareMetric(pq.metricID)
+	return format.HardwareMetric(pq.metricID())
+}
+
+func (pq *preparedPointsQuery) metricID() int32 {
+	if pq.filterIn.Metrics.Count() != 1 {
+		return 0
+	}
+	return pq.filterIn.Metrics.Head.MetricID
 }
 
 func tagValuesQuery(pq *preparedTagValuesQuery, lod data_model.LOD) (string, tagValuesQueryMeta, error) {
@@ -92,37 +88,37 @@ SELECT
 FROM
   %s
 WHERE
-  %s = ?
+  %s
   AND time >= ? AND time < ?%s`,
 		mappedColumnName(lod.HasPreKey, pq.tagID, pq.preKeyTagID),
 		valueName,
 		sqlAggFn(lod.Version, "sum"),
 		pq.preKeyTableName(lod),
-		metricColumn(lod.Version),
+		metricFilter(pq.filterIn.Metrics, pq.filterNotIn.Metrics, lod.Version),
 		datePredicate(lod.Version),
 	)
-	args := []interface{}{pq.metricID, lod.FromSec, lod.ToSec}
+	args := []interface{}{lod.FromSec, lod.ToSec}
 	if lod.Version == Version1 {
 		args = append(args, lod.FromSec, lod.ToSec)
 	}
-	for k, ids := range pq.filterIn {
+	for i, ids := range pq.filterIn.Tags {
 		if len(ids) > 0 {
+			k := format.TagID(i)
 			query += fmt.Sprintf(`
   AND %s IN (%s)`, mappedColumnName(lod.HasPreKey, k, pq.preKeyTagID), expandBindVars(len(ids)))
-			args = append(args, ids...)
-		} else {
-			query += `
-  AND 1=0`
+			for _, id := range ids {
+				args = append(args, id.Mapped)
+			}
 		}
 	}
-	for k, ids := range pq.filterNotIn {
+	for i, ids := range pq.filterNotIn.Tags {
 		if len(ids) > 0 {
+			k := format.TagID(i)
 			query += fmt.Sprintf(`
   AND %s NOT IN (%s)`, mappedColumnName(lod.HasPreKey, k, pq.preKeyTagID), expandBindVars(len(ids)))
-			args = append(args, ids...)
-		} else {
-			query += `
-  AND 1=1`
+			for _, id := range ids {
+				args = append(args, id.Mapped)
+			}
 		}
 	}
 	query += fmt.Sprintf(`
@@ -145,7 +141,7 @@ func tagValuesQueryV3(pq *preparedTagValuesQuery, lod data_model.LOD) (string, t
 	qt, err := template.New("").Parse(`
 SELECT {{.MappedColumnName}} AS _mapped, {{.UnmappedColumnName}} AS _unmapped, toFloat64(sum(count)) AS _count
 FROM {{.TableName}}
-WHERE metric = {{.MetricId}}
+WHERE {{.MetricFilter}}
   AND time >= {{.From}} AND time < {{.To}}
 {{.TagConditions}}
 GROUP BY _mapped, _unmapped
@@ -161,7 +157,7 @@ SETTINGS optimize_aggregation_in_order = 1
 		MappedColumnName   string
 		UnmappedColumnName string
 		TableName          string
-		MetricId           int32
+		MetricFilter       string
 		TagConditions      string
 		From               int64
 		To                 int64
@@ -172,14 +168,14 @@ SETTINGS optimize_aggregation_in_order = 1
 		MappedColumnName:   mappedColumnNameV3(pq.tagID),
 		UnmappedColumnName: unmappedColumnNameV3(pq.tagID),
 		TableName:          pq.preKeyTableName(lod),
-		MetricId:           pq.metricID,
+		MetricFilter:       metricFilter(pq.filterIn.Metrics, pq.filterNotIn.Metrics, lod.Version),
 		From:               lod.FromSec,
 		To:                 lod.ToSec,
 		Limit:              pq.numResults + 1,
 	}
 	cond := strings.Builder{}
-	writeTagCond(&cond, pq.filterInV3, true)
-	writeTagCond(&cond, pq.filterNotInV3, false)
+	writeTagCond(&cond, pq.filterIn, true)
+	writeTagCond(&cond, pq.filterNotIn, false)
 	p.TagConditions = cond.String()
 	cond.Reset()
 
@@ -191,15 +187,16 @@ SETTINGS optimize_aggregation_in_order = 1
 	return b.String(), tagValuesQueryMeta{mixed: true}, nil
 }
 
-func writeTagCond(cond *strings.Builder, f map[string][]maybeMappedTag, in bool) {
+func writeTagCond(cond *strings.Builder, f data_model.TagFilters, in bool) {
 	strValues := make([]string, 0, 16)
 	intValues := make([]string, 0, 16)
-	for tag, values := range f {
+	for i, values := range f.Tags {
 		strValues = strValues[:0]
 		intValues = intValues[:0]
 		if len(values) == 0 {
 			continue
 		}
+		tag := format.TagID(i)
 		for _, valPair := range values {
 			if len(valPair.Value) > 0 {
 				strValues = append(strValues, "'"+valPair.Value+"'")
@@ -359,37 +356,37 @@ SELECT
 FROM
   %s
 WHERE
-  %s = ?
+  %s
   AND time >= ? AND time < ?%s`,
 		timeInterval,
 		commaBy,
 		what,
 		pq.preKeyTableName(lod),
-		metricColumn(lod.Version),
+		metricFilter(pq.filterIn.Metrics, pq.filterNotIn.Metrics, lod.Version),
 		datePredicate(lod.Version),
 	)
-	args := []interface{}{pq.metricID, lod.FromSec, lod.ToSec}
+	args := []interface{}{lod.FromSec, lod.ToSec}
 	if lod.Version == Version1 {
 		args = append(args, lod.FromSec, lod.ToSec)
 	}
-	for k, ids := range pq.filterIn {
+	for i, ids := range pq.filterIn.Tags {
 		if len(ids) > 0 {
+			k := format.TagID(i)
 			query += fmt.Sprintf(`
   AND %s IN (%s)`, mappedColumnName(lod.HasPreKey, k, pq.preKeyTagID), expandBindVars(len(ids)))
-			args = append(args, ids...)
-		} else {
-			query += `
-  AND 1=0`
+			for _, id := range ids {
+				args = append(args, id.Mapped)
+			}
 		}
 	}
-	for k, ids := range pq.filterNotIn {
+	for i, ids := range pq.filterNotIn.Tags {
 		if len(ids) > 0 {
+			k := format.TagID(i)
 			query += fmt.Sprintf(`
   AND %s NOT IN (%s)`, mappedColumnName(lod.HasPreKey, k, pq.preKeyTagID), expandBindVars(len(ids)))
-			args = append(args, ids...)
-		} else {
-			query += `
-  AND 1=1`
+			for _, id := range ids {
+				args = append(args, id.Mapped)
+			}
 		}
 	}
 
@@ -468,14 +465,14 @@ func loadPointsQueryV3(pq *preparedPointsQuery, lod data_model.LOD, utcOffset in
 	queryBuilder.WriteString(what)
 	queryBuilder.WriteString("\nFROM ")
 	queryBuilder.WriteString(pq.preKeyTableName(lod))
-	queryBuilder.WriteString("\nWHERE index_type = 0 AND metric = ")
-	queryBuilder.WriteString(fmt.Sprint(pq.metricID))
+	queryBuilder.WriteString("\nWHERE index_type = 0 AND ")
+	queryBuilder.WriteString(metricFilter(pq.filterIn.Metrics, pq.filterNotIn.Metrics, lod.Version))
 	queryBuilder.WriteString(" AND time >= ")
 	queryBuilder.WriteString(fmt.Sprint(lod.FromSec))
 	queryBuilder.WriteString(" AND time < ")
 	queryBuilder.WriteString(fmt.Sprint(lod.ToSec))
-	writeTagCond(&queryBuilder, pq.filterInV3, true)
-	writeTagCond(&queryBuilder, pq.filterNotInV3, false)
+	writeTagCond(&queryBuilder, pq.filterIn, true)
+	writeTagCond(&queryBuilder, pq.filterNotIn, false)
 	queryBuilder.WriteString("\nGROUP BY _time")
 	queryBuilder.WriteString(byTags)
 	if pq.orderBy {
@@ -502,7 +499,7 @@ func loadPointsQueryV3(pq *preparedPointsQuery, lod data_model.LOD, utcOffset in
 	return q, pointsQueryMeta{vals: cnt, tags: pq.by, minMaxHost: pq.kind != data_model.DigestKindCount, version: lod.Version}, err
 }
 
-func loadPointQuery(pq *preparedPointsQuery, lod data_model.LOD, utcOffset int64) (string, pointsQueryMeta, error) {
+func loadPointQuery(pq *preparedPointsQuery, lod data_model.LOD) (string, pointsQueryMeta, error) {
 	what, cnt, err := loadPointsSelectWhat(pq, lod.Version)
 	if err != nil {
 		return "", pointsQueryMeta{}, err
@@ -530,33 +527,39 @@ SELECT
 FROM
   %s
 WHERE
-  %s = ?
+  %s
   AND time >= ? AND time < ?%s`,
 		commaBySelect,
 		what,
-		preKeyTableNameFromPoint(lod, "", pq.preKeyTagID, pq.filterIn, pq.filterNotIn),
-		metricColumn(lod.Version),
+		preKeyTableNameFromPoint(lod, pq.preKeyTagX, pq.filterIn, pq.filterNotIn),
+		metricFilter(pq.filterIn.Metrics, pq.filterNotIn.Metrics, lod.Version),
 		datePredicate(lod.Version),
 	)
-	args := []interface{}{pq.metricID, lod.FromSec, lod.ToSec}
+	args := []interface{}{lod.FromSec, lod.ToSec}
 	if lod.Version == Version1 {
 		args = append(args, lod.FromSec, lod.ToSec)
 	}
-	for k, ids := range pq.filterIn {
+	for i, ids := range pq.filterIn.Tags {
 		if len(ids) > 0 {
+			k := format.TagID(i)
 			query += fmt.Sprintf(`
   AND %s IN (%s)`, mappedColumnName(lod.HasPreKey, k, pq.preKeyTagID), expandBindVars(len(ids)))
-			args = append(args, ids...)
+			for _, id := range ids {
+				args = append(args, id.Mapped)
+			}
 		} else {
 			query += `
   AND 1=0`
 		}
 	}
-	for k, ids := range pq.filterNotIn {
+	for i, ids := range pq.filterNotIn.Tags {
 		if len(ids) > 0 {
+			k := format.TagID(i)
 			query += fmt.Sprintf(`
   AND %s NOT IN (%s)`, mappedColumnName(lod.HasPreKey, k, pq.preKeyTagID), expandBindVars(len(ids)))
-			args = append(args, ids...)
+			for _, id := range ids {
+				args = append(args, id.Mapped)
+			}
 		} else {
 			query += `
   AND 1=1`
@@ -599,6 +602,34 @@ func sqlMaxHost(version string) string {
 	return "argMaxMerge(max_host)"
 }
 
+func metricFilter(filterIn, filterNotIn data_model.MetricList, version string) string {
+	var sb strings.Builder
+	if !filterIn.Empty() {
+		sb.WriteString(metricColumn(version))
+		sb.WriteString(" IN (")
+		sb.WriteString(fmt.Sprint(filterIn.Head.MetricID))
+		for i := 0; i < len(filterIn.Tail); i++ {
+			sb.WriteByte(',')
+			sb.WriteString(fmt.Sprint(filterIn.Tail[1].MetricID))
+		}
+		sb.WriteByte(')')
+	}
+	if !filterNotIn.Empty() {
+		if !filterIn.Empty() {
+			sb.WriteString(" AND ")
+		}
+		sb.WriteString(metricColumn(version))
+		sb.WriteString(" IN (")
+		sb.WriteString(fmt.Sprint(filterNotIn.Head.MetricID))
+		for i := 0; i < len(filterNotIn.Tail); i++ {
+			sb.WriteByte(',')
+			sb.WriteString(fmt.Sprint(filterNotIn.Tail[1].MetricID))
+		}
+		sb.WriteByte(')')
+	}
+	return sb.String()
+}
+
 func metricColumn(version string) string {
 	if version == Version1 {
 		return "stats"
@@ -636,11 +667,11 @@ func (pq *preparedPointsQuery) preKeyTableName(lod data_model.LOD) string {
 	var usePreKey bool
 	if lod.HasPreKey {
 		usePreKey = lod.PreKeyOnly ||
-			len(pq.filterIn[pq.preKeyTagID]) > 0 ||
-			len(pq.filterNotIn[pq.preKeyTagID]) > 0
+			pq.filterIn.Contains(pq.preKeyTagX) ||
+			pq.filterNotIn.Contains(pq.preKeyTagX)
 		if !usePreKey {
 			for _, v := range pq.by {
-				if v == pq.preKeyTagID {
+				if v == format.TagID(pq.preKeyTagX) {
 					usePreKey = true
 					break
 				}
@@ -657,16 +688,16 @@ func (pq *preparedTagValuesQuery) preKeyTableName(lod data_model.LOD) string {
 	usePreKey := (lod.HasPreKey &&
 		(lod.PreKeyOnly ||
 			(pq.tagID != "" && pq.tagID == pq.preKeyTagID) ||
-			len(pq.filterIn[pq.preKeyTagID]) > 0 ||
-			len(pq.filterNotIn[pq.preKeyTagID]) > 0))
+			pq.filterIn.Contains(pq.preKeyTagX) ||
+			pq.filterNotIn.Contains(pq.preKeyTagX)))
 	if usePreKey {
 		return preKeyTableNames[lod.Table]
 	}
 	return lod.Table
 }
 
-func preKeyTableNameFromPoint(lod data_model.LOD, tagID string, preKeyTagID string, filterIn map[string][]interface{}, filterNotIn map[string][]interface{}) string {
-	usePreKey := lod.HasPreKey && ((tagID != "" && tagID == preKeyTagID) || len(filterIn[preKeyTagID]) > 0 || len(filterNotIn[preKeyTagID]) > 0)
+func preKeyTableNameFromPoint(lod data_model.LOD, preKeyTagX int, filterIn data_model.TagFilters, filterNotIn data_model.TagFilters) string {
+	usePreKey := lod.HasPreKey && (filterIn.Contains(preKeyTagX) || filterNotIn.Contains(preKeyTagX))
 	if usePreKey {
 		return preKeyTableNames[lod.Table]
 	}
